@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sidebar-width: 240px;
+  --sidebar-collapsed-width: 64px;
+  --navbar-height: 60px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: linear-gradient(135deg, #f6fbff 0%, #f4fbf7 55%, #fff6f2 100%);
+  color: #0f172a;
+  font-family: var(--font-montserrat), system-ui, sans-serif;
+}
+
+.app-shell {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 10% 10%, rgba(45, 212, 191, 0.18), transparent 45%),
+    radial-gradient(circle at 90% 20%, rgba(251, 191, 36, 0.12), transparent 40%),
+    radial-gradient(circle at 70% 90%, rgba(248, 113, 113, 0.12), transparent 45%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.4));
+}
+
+.app-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: radial-gradient(rgba(15, 23, 42, 0.06) 1px, transparent 1px);
+  background-size: 120px 120px;
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.app-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #c5d3cd;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a7b6b0;
+}
+
+/* Smooth transitions */
+.sidebar-transition {
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Kanban column drag states */
+.column-drag-over {
+  background: rgba(99, 102, 241, 0.04);
+  border-color: rgba(99, 102, 241, 0.3) !important;
+}
+
+/* Task card drag */
+.task-card-dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid #14b8a6;
+  outline-offset: 2px;
+}
+
+/* Avatar gradient ring */
+.avatar-ring {
+  box-shadow: 0 0 0 2px white, 0 0 0 3.5px currentColor;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
