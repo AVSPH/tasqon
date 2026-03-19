@@ -1,8 +1,1 @@
-{
-  "/page": "app/page.js",
-  "/board/page": "app/board/page.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/notifications/page": "app/notifications/page.js",
-  "/agenda/page": "app/agenda/page.js",
-  "/settings/page": "app/settings/page.js"
-}
+{}

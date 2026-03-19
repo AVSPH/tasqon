@@ -232,6 +232,15 @@ export const INITIAL_TASKS: Task[] = [
   },
 ];
 
+export const ACTIVITY_FEED: ActivityItem[] = [
+  { id: "act1", user: MEMBERS[1], action: "moved", target: "Performance audit to In Progress", createdAt: "2026-03-16T09:58:00.000Z" },
+  { id: "act2", user: MEMBERS[0], action: "commented on", target: "Redesign onboarding flow", createdAt: "2026-03-16T09:45:00.000Z" },
+  { id: "act3", user: MEMBERS[3], action: "completed", target: "Set up CI/CD pipeline", createdAt: "2026-03-16T08:50:00.000Z" },
+  { id: "act4", user: MEMBERS[2], action: "assigned you to", target: "API rate limiting", createdAt: "2026-03-16T08:20:00.000Z" },
+  { id: "act5", user: MEMBERS[4], action: "reviewed", target: "Dark mode implementation", createdAt: "2026-03-16T07:30:00.000Z" },
+  { id: "act6", user: MEMBERS[1], action: "uploaded a file to", target: "Fix payment webhook", createdAt: "2026-03-16T06:10:00.000Z" },
+];
+
 export const INITIAL_PROJECT: Project = {
   id: "proj-1",
   name: "Taskflow v2.0",
@@ -240,6 +249,7 @@ export const INITIAL_PROJECT: Project = {
   emoji: "🚀",
   members: MEMBERS,
   tasks: INITIAL_TASKS,
+  activities: ACTIVITY_FEED,
 };
 
 export const SIDEBAR_PROJECTS = [
@@ -247,13 +257,4 @@ export const SIDEBAR_PROJECTS = [
   { id: "proj-2", name: "Marketing Site", emoji: "🌐", color: "#0ea5e9" },
   { id: "proj-3", name: "Mobile App", emoji: "📱", color: "#10b981" },
   { id: "proj-4", name: "Analytics Dashboard", emoji: "📊", color: "#f59e0b" },
-];
-
-export const ACTIVITY_FEED: ActivityItem[] = [
-  { id: "act1", user: MEMBERS[1], action: "moved", target: "Performance audit to In Progress", createdAt: "2026-03-16T09:58:00.000Z" },
-  { id: "act2", user: MEMBERS[0], action: "commented on", target: "Redesign onboarding flow", createdAt: "2026-03-16T09:45:00.000Z" },
-  { id: "act3", user: MEMBERS[3], action: "completed", target: "Set up CI/CD pipeline", createdAt: "2026-03-16T08:50:00.000Z" },
-  { id: "act4", user: MEMBERS[2], action: "assigned you to", target: "API rate limiting", createdAt: "2026-03-16T08:20:00.000Z" },
-  { id: "act5", user: MEMBERS[4], action: "reviewed", target: "Dark mode implementation", createdAt: "2026-03-16T07:30:00.000Z" },
-  { id: "act6", user: MEMBERS[1], action: "uploaded a file to", target: "Fix payment webhook", createdAt: "2026-03-16T06:10:00.000Z" },
 ];
