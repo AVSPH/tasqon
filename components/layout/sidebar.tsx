@@ -48,7 +48,7 @@ export function Sidebar() {
         </div>
         {!collapsed && (
           <span className="font-display font-bold text-slate-900 text-lg tracking-tight">
-            TaskFlow
+            Queuetask
           </span>
         )}
       </div>

@@ -41,6 +41,18 @@ export async function signOut() {
 }
 
 /**
+ * Sign in with Google OAuth.
+ */
+export async function signInWithGoogle(redirectTo?: string) {
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: redirectTo ? { redirectTo } : undefined,
+  });
+  if (error) throw error;
+  return data;
+}
+
+/**
  * Retrieve the current session (null when unauthenticated).
  */
 export async function getCurrentSession() {

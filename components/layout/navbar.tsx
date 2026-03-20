@@ -20,6 +20,7 @@ import { useAuth } from "../auth-provider";
 import { useLogin } from "@/hooks/auth/useLogin";
 import type { LoginFormValues } from "@/types/auth";
 import { toast } from "sonner";
+import { signInWithGoogle } from "@/lib/auth";
 
 const PRIORITY_FILTERS: {
   label: string;
@@ -42,6 +43,7 @@ export function Navbar() {
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authError, setAuthError] = useState("");
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const searchQuery = useAppStore((s) => s.searchQuery);
   const filterPriority = useAppStore((s) => s.filterPriority);
   const setSearchQuery = useAppStore((s) => s.setSearchQuery);
@@ -102,6 +104,20 @@ export function Navbar() {
         toast.error(`Something went wrong: ${error.message}`);
       },
     });
+  }, []);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    setIsGoogleLoading(true);
+    try {
+      await signInWithGoogle(window.location.origin);
+    } catch (signInError) {
+      const message = signInError instanceof Error
+        ? signInError.message
+        : "Google sign-in failed";
+      toast.error(message);
+    } finally {
+      setIsGoogleLoading(false);
+    }
   }, []);
 
   return (
@@ -361,6 +377,28 @@ export function Navbar() {
                 className="w-full h-9 rounded-lg bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 transition-colors"
               >
                 Sign in
+              </button>
+              <div className="flex items-center gap-3">
+                <span className="h-px flex-1 bg-slate-200" />
+                <span className="text-[11px] uppercase tracking-widest text-slate-400">
+                  Or
+                </span>
+                <span className="h-px flex-1 bg-slate-200" />
+              </div>
+              <button
+                onClick={handleGoogleSignIn}
+                disabled={isGoogleLoading}
+                className="w-full h-9 rounded-lg bg-white/80 border border-white/70 text-sm font-medium text-slate-700 hover:bg-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <span className="w-4 h-4">
+                  <svg viewBox="0 0 48 48" className="w-4 h-4" aria-hidden="true">
+                    <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303C33.59 32.88 29.172 36 24 36c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.273 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.651-.389-3.917z"/>
+                    <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.702 16.108 19.012 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.273 4 24 4 16.319 4 9.655 8.338 6.306 14.691z"/>
+                    <path fill="#4CAF50" d="M24 44c5.084 0 9.804-1.943 13.314-5.116l-6.149-5.207C29.06 35.091 26.65 36 24 36c-5.138 0-9.534-3.084-11.273-7.494l-6.528 5.028C9.518 39.556 16.227 44 24 44z"/>
+                    <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-0.82 2.27-2.358 4.192-4.338 5.677l6.149 5.207C39.591 36.635 44 31.091 44 24c0-1.341-.138-2.651-.389-3.917z"/>
+                  </svg>
+                </span>
+                Continue with Google
               </button>
             </div>
           </div>
