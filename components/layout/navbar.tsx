@@ -19,7 +19,7 @@ import { Priority } from "@/lib/types";
 import { useAuth } from "../auth-provider";
 import { useLogin } from "@/hooks/auth/useLogin";
 import { toast } from "sonner";
-import { signInWithGoogle } from "@/lib/auth";
+import { signInWithGoogle, signUpWithEmail } from "@/lib/auth";
 
 const PRIORITY_FILTERS: {
   label: string;
@@ -37,12 +37,17 @@ export function Navbar() {
   const [showFilter, setShowFilter] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [isInviteSending, setIsInviteSending] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [authName, setAuthName] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [authConfirmPassword, setAuthConfirmPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isSignUpLoading, setIsSignUpLoading] = useState(false);
   const searchQuery = useAppStore((s) => s.searchQuery);
   const filterPriority = useAppStore((s) => s.filterPriority);
   const setSearchQuery = useAppStore((s) => s.setSearchQuery);
@@ -117,6 +122,44 @@ export function Navbar() {
     });
   }, [authEmail, authPassword, login]);
 
+  const handleSignUp = useCallback(async () => {
+    const normalizedEmail = authEmail.trim().toLowerCase();
+    const trimmedName = authName.trim();
+
+    if (!trimmedName || !normalizedEmail || !authPassword) {
+      setAuthError("Name, email, and password are required");
+      return;
+    }
+
+    if (authPassword !== authConfirmPassword) {
+      setAuthError("Passwords do not match");
+      return;
+    }
+
+    setIsSignUpLoading(true);
+    try {
+      const data = await signUpWithEmail({
+        email: normalizedEmail,
+        password: authPassword,
+        fullName: trimmedName,
+      });
+      setAuthError("");
+      if (data.session) {
+        toast.success("Account created and signed in");
+        setShowAuthModal(false);
+      } else {
+        toast.success("Account created. Check your email to confirm.");
+        setAuthMode("signin");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Sign up failed";
+      setAuthError(message);
+      toast.error(message);
+    } finally {
+      setIsSignUpLoading(false);
+    }
+  }, [authEmail, authPassword, authConfirmPassword, authName]);
+
   const handleGoogleSignIn = useCallback(async () => {
     setIsGoogleLoading(true);
     try {
@@ -131,6 +174,40 @@ export function Navbar() {
       setIsGoogleLoading(false);
     }
   }, []);
+
+  const handleInvite = useCallback(async () => {
+    const normalizedEmail = inviteEmail.trim().toLowerCase();
+    if (!normalizedEmail) {
+      toast.error("Please enter an email address");
+      return;
+    }
+
+    setIsInviteSending(true);
+    try {
+      const response = await fetch("/api/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          projectId: activeProjectId,
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error || "Invite failed");
+      }
+
+      toast.success("Invite sent");
+      setInviteEmail("");
+      setShowInvite(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Invite failed";
+      toast.error(message);
+    } finally {
+      setIsInviteSending(false);
+    }
+  }, [activeProjectId, inviteEmail]);
 
   return (
     <>
@@ -147,7 +224,7 @@ export function Navbar() {
                 : "Sign in required"}
             </h1>
             <p className="text-[11px] text-slate-400 leading-tight">
-              Kanban Board
+              Project Board
             </p>
           </div>
         </div>
@@ -263,13 +340,11 @@ export function Navbar() {
                     className="flex-1 h-8 px-3 rounded-lg bg-white/70 border border-white/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400/30 focus:border-brand-400 transition-all"
                   />
                   <button
-                    onClick={() => {
-                      setInviteEmail("");
-                      setShowInvite(false);
-                    }}
-                    className="h-8 px-3 rounded-lg bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 transition-colors"
+                    onClick={handleInvite}
+                    disabled={isInviteSending}
+                    className="h-8 px-3 rounded-lg bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Send
+                    {isInviteSending ? "Sending..." : "Send"}
                   </button>
                 </div>
               </div>
@@ -348,7 +423,7 @@ export function Navbar() {
           <div className="relative w-full max-w-sm bg-white/90 backdrop-blur-xl rounded-2xl border border-white/70 shadow-modal p-6 animate-scale-in">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display font-semibold text-slate-800">
-                Sign in
+                {authMode === "signin" ? "Sign in" : "Sign up"}
               </h2>
               <button
                 onClick={() => setShowAuthModal(false)}
@@ -368,10 +443,23 @@ export function Navbar() {
                   Session expired due to inactivity. Please sign in again.
                 </p>
               )}
+              {authMode === "signup" && (
+                <input
+                  type="text"
+                  placeholder="Full name"
+                  disabled={isPending || isSignUpLoading}
+                  value={authName}
+                  onChange={(e) => {
+                    setAuthName(e.target.value);
+                    if (authError) setAuthError("");
+                  }}
+                  className="w-full h-9 px-3 rounded-lg bg-white/70 border border-white/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400/30 focus:border-brand-400"
+                />
+              )}
               <input
                 type="email"
                 placeholder="Email"
-                disabled={isPending}
+                disabled={isPending || isSignUpLoading}
                 value={authEmail}
                 onChange={(e) => {
                   setAuthEmail(e.target.value);
@@ -382,7 +470,7 @@ export function Navbar() {
               <input
                 type="password"
                 placeholder="Password"
-                disabled={isPending}
+                disabled={isPending || isSignUpLoading}
                 value={authPassword}
                 onChange={(e) => {
                   setAuthPassword(e.target.value);
@@ -390,13 +478,28 @@ export function Navbar() {
                 }}
                 className="w-full h-9 px-3 rounded-lg bg-white/70 border border-white/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400/30 focus:border-brand-400"
               />
+              {authMode === "signup" && (
+                <input
+                  type="password"
+                  placeholder="Confirm password"
+                  disabled={isPending || isSignUpLoading}
+                  value={authConfirmPassword}
+                  onChange={(e) => {
+                    setAuthConfirmPassword(e.target.value);
+                    if (authError) setAuthError("");
+                  }}
+                  className="w-full h-9 px-3 rounded-lg bg-white/70 border border-white/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400/30 focus:border-brand-400"
+                />
+              )}
               {authError && <p className="text-xs text-red-500">{authError}</p>}
               <button
-                onClick={handleLogin}
-                disabled={isPending}
+                onClick={authMode === "signin" ? handleLogin : handleSignUp}
+                disabled={isPending || isSignUpLoading}
                 className="w-full h-9 rounded-lg bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 transition-colors"
               >
-                {isPending ? "Signing in..." : "Sign in"}
+                {authMode === "signin"
+                  ? (isPending ? "Signing in..." : "Sign in")
+                  : (isSignUpLoading ? "Creating account..." : "Create account")}
               </button>
               <div className="flex items-center gap-3">
                 <span className="h-px flex-1 bg-slate-200" />
@@ -407,7 +510,7 @@ export function Navbar() {
               </div>
               <button
                 onClick={handleGoogleSignIn}
-                disabled={isGoogleLoading}
+                disabled={isGoogleLoading || isSignUpLoading}
                 className="w-full h-9 rounded-lg bg-white/80 border border-white/70 text-sm font-medium text-slate-700 hover:bg-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <span className="w-4 h-4">
@@ -436,6 +539,19 @@ export function Navbar() {
                 </span>
                 Continue with Google
               </button>
+              <p className="text-xs text-slate-400 text-center">
+                {authMode === "signin" ? "No account yet?" : "Already have an account?"}{" "}
+                <button
+                  onClick={() => {
+                    setAuthMode(authMode === "signin" ? "signup" : "signin");
+                    setAuthError("");
+                  }}
+                  className="text-brand-600 hover:text-brand-700 font-medium"
+                  type="button"
+                >
+                  {authMode === "signin" ? "Sign up" : "Sign in"}
+                </button>
+              </p>
             </div>
           </div>
         </div>

@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import {
   X, Calendar, Tag as TagIcon, Users, Paperclip,
   CheckSquare, MessageSquare, Plus, Check, Trash2,
@@ -9,6 +9,7 @@ import { cn, PRIORITY_CONFIG, timeAgo, formatDate } from "@/lib/utils";
 import { Task, Priority, TaskStatus } from "@/lib/types";
 import { useAppStore } from "@/lib/store";
 import { MEMBERS, TAGS } from "@/lib/mock-data";
+import { useAuth } from "@/components/auth-provider";
 
 interface TaskModalProps {
   task: Task;
@@ -22,6 +23,39 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
   const addChecklistItem = useAppStore((s) => s.addChecklistItem);
   const deleteTask = useAppStore((s) => s.deleteTask);
   const columns = useAppStore((s) => s.columns);
+  const { user } = useAuth();
+
+  const actor = useMemo(() => {
+    if (!user) return null;
+    const name =
+      (user.user_metadata?.full_name as string | undefined) ??
+      user.email?.split("@")[0] ??
+      "User";
+    const initials = name
+      .split(/[._\s-]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "U";
+    const palette = ["#14b8a6", "#0ea5e9", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6"];
+    let hash = 0;
+    for (let i = 0; i < name.length; i += 1) {
+      hash = (hash << 5) - hash + name.charCodeAt(i);
+      hash |= 0;
+    }
+    const color = palette[Math.abs(hash) % palette.length];
+    return {
+      id: user.id,
+      name,
+      avatar: "",
+      color,
+      role: "Member",
+      initials,
+    };
+  }, [user]);
+
+  const updateTaskWithActor = (updates: Partial<Task>) =>
+    updateTask(task.id, updates, actor ?? undefined);
 
   const [commentText, setCommentText] = useState("");
   const [newCheckItem, setNewCheckItem] = useState("");
@@ -49,18 +83,18 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
   }, [editingTitle]);
 
   const handleTitleSave = () => {
-    if (titleValue.trim()) updateTask(task.id, { title: titleValue });
+    if (titleValue.trim()) updateTaskWithActor({ title: titleValue });
     setEditingTitle(false);
   };
 
   const handleDescSave = () => {
-    updateTask(task.id, { description: descValue });
+    updateTaskWithActor({ description: descValue });
     setEditingDesc(false);
   };
 
   const handleAddComment = () => {
     if (!commentText.trim()) return;
-    addComment(task.id, commentText);
+    addComment(task.id, commentText, actor ?? undefined);
     setCommentText("");
   };
 
@@ -77,14 +111,14 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
     const newAssignees = isAssigned
       ? task.assignees.filter((a) => a.id !== memberId)
       : [...task.assignees, member];
-    updateTask(task.id, { assignees: newAssignees });
+    updateTaskWithActor({ assignees: newAssignees });
   };
 
   const handleToggleTag = (tagId: string) => {
     const hasTag = task.tags.some((t) => t.id === tagId);
     const tag = TAGS.find((t) => t.id === tagId)!;
     const newTags = hasTag ? task.tags.filter((t) => t.id !== tagId) : [...task.tags, tag];
-    updateTask(task.id, { tags: newTags });
+    updateTaskWithActor({ tags: newTags });
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -121,7 +155,7 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
                     <button
                       key={col.id}
                       onClick={() => {
-                        updateTask(task.id, { status: col.id as TaskStatus });
+                        updateTaskWithActor({ status: col.id as TaskStatus });
                         setShowStatusPicker(false);
                       }}
                       className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg hover:bg-white/70 text-sm text-slate-700 transition-colors"
@@ -155,7 +189,7 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
                     return (
                       <button
                         key={p}
-                        onClick={() => { updateTask(task.id, { priority: p }); setShowPriorityPicker(false); }}
+                        onClick={() => { updateTaskWithActor({ priority: p }); setShowPriorityPicker(false); }}
                         className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg hover:bg-white/70 text-sm transition-colors"
                       >
                         <span className={cn("w-2 h-2 rounded-full", conf.dot)} />
@@ -171,7 +205,7 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => { deleteTask(task.id); onClose(); }}
+              onClick={() => { deleteTask(task.id, actor ?? undefined); onClose(); }}
               className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"
             >
               <Trash2 className="w-4 h-4" />
@@ -223,7 +257,7 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
                 <input
                   type="date"
                   value={task.dueDate || ""}
-                  onChange={(e) => updateTask(task.id, { dueDate: e.target.value || null })}
+                  onChange={(e) => updateTaskWithActor({ dueDate: e.target.value || null })}
                   className="text-sm font-medium text-slate-700 bg-transparent focus:outline-none cursor-pointer"
                 />
               </div>
@@ -537,11 +571,11 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
 
               {/* Comment input */}
               <div className="flex gap-3">
-                  <div
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 mt-1"
-                    style={{ backgroundColor: "#14b8a6" }}
-                  >
-                  AR
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 mt-1"
+                  style={{ backgroundColor: actor?.color ?? "#14b8a6" }}
+                >
+                  {actor?.initials ?? "AR"}
                 </div>
                 <div className="flex-1">
                   <textarea

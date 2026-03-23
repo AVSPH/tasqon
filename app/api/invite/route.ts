@@ -1,0 +1,74 @@
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { createClient as createServerClient } from "@/utils/supabase/server";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+export async function POST(request: Request) {
+  if (!supabaseUrl || !serviceRoleKey) {
+    return NextResponse.json(
+      { error: "Server is missing Supabase credentials" },
+      { status: 500 },
+    );
+  }
+
+  const { email, projectId } = await request.json();
+  if (!email || !projectId) {
+    return NextResponse.json(
+      { error: "Email and projectId are required" },
+      { status: 400 },
+    );
+  }
+
+  const cookieStore = cookies();
+  const supabase = createServerClient(cookieStore);
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const admin = createAdminClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  const origin = request.headers.get("origin") ?? undefined;
+
+  const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(
+    email,
+    {
+      data: {
+        project_id: projectId,
+        invited_by: user.id,
+        role: "member",
+      },
+      ...(origin ? { redirectTo: origin } : {}),
+    },
+  );
+
+  if (inviteError) {
+    return NextResponse.json({ error: inviteError.message }, { status: 400 });
+  }
+
+  const { error: insertError } = await admin.from("invites").upsert(
+    {
+      email,
+      project_id: projectId,
+      invited_by: user.id,
+      role: "member",
+      status: "sent",
+    },
+    { onConflict: "project_id,email" },
+  );
+
+  if (insertError) {
+    return NextResponse.json({ error: insertError.message }, { status: 400 });
+  }
+
+  return NextResponse.json({ ok: true });
+}

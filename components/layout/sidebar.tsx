@@ -36,7 +36,7 @@ export function Sidebar() {
   const setActiveProject = useAppStore((s) => s.setActiveProject);
   const addProject = useAppStore((s) => s.addProject);
   const deleteProject = useAppStore((s) => s.deleteProject);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const pathname = usePathname();
   const [addingProject, setAddingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
@@ -60,7 +60,7 @@ export function Sidebar() {
         </div>
         {!collapsed && (
           <span className="font-display font-bold text-slate-900 text-lg tracking-tight">
-            Queuetask
+            Tasqon
           </span>
         )}
       </div>
@@ -233,13 +233,21 @@ export function Sidebar() {
               className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
               style={{ backgroundColor: "#14b8a6" }}
             >
-              AR
+              {(user?.user_metadata?.full_name ?? user?.email ?? "")
+                .split("@")[0]
+                .split(/[._\s-]+/)
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((part: string) => part[0]?.toUpperCase() ?? "")
+                .join("") || "U"}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-slate-800 truncate">
-                Alex Rivera
+                {user?.user_metadata?.full_name ?? user?.email ?? "User"}
               </p>
-              <p className="text-xs text-slate-400 truncate">Designer</p>
+              <p className="text-xs text-slate-400 truncate">
+                {user?.user_metadata?.role ?? "Member"}
+              </p>
             </div>
           </>
         )}

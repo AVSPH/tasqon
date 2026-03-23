@@ -19,6 +19,7 @@ interface AppState {
     showCompleted: boolean;
     weekStartsOnMonday: boolean;
     enableAnimations: boolean;
+    theme: "mist" | "linen" | "dark";
   };
   selectedTask: Task | null;
   sidebarCollapsed: boolean;
@@ -38,12 +39,12 @@ interface AppState {
   checkSession: () => void;
   updateAuthProfile: (name: string, email: string) => void;
   updatePreferences: (updates: Partial<AppState["preferences"]>) => void;
-  updateTask: (taskId: string, updates: Partial<Task>) => void;
-  moveTask: (taskId: string, newStatus: TaskStatus) => void;
+  updateTask: (taskId: string, updates: Partial<Task>, actor?: Member) => void;
+  moveTask: (taskId: string, newStatus: TaskStatus, actor?: Member) => void;
   addColumn: (title: string) => void;
-  addTask: (task: Omit<Task, "id" | "order">) => void;
-  deleteTask: (taskId: string) => void;
-  addComment: (taskId: string, text: string) => void;
+  addTask: (task: Omit<Task, "id" | "order">, actor?: Member) => void;
+  deleteTask: (taskId: string, actor?: Member) => void;
+  addComment: (taskId: string, text: string, actor?: Member) => void;
   toggleChecklistItem: (taskId: string, itemId: string) => void;
   addChecklistItem: (taskId: string, text: string) => void;
   toggleSidebar: () => void;
@@ -84,6 +85,7 @@ export const useAppStore = create<AppState>()(
         showCompleted: true,
         weekStartsOnMonday: false,
         enableAnimations: true,
+        theme: "mist",
       },
       selectedTask: null,
       sidebarCollapsed: false,
@@ -215,7 +217,7 @@ export const useAppStore = create<AppState>()(
           };
         }),
 
-      updateTask: (taskId, updates) =>
+      updateTask: (taskId, updates, actor) =>
         set((state) => {
           const activeProject = state.projects.find((p) => p.id === state.activeProjectId);
           const taskBefore = activeProject?.tasks.find((t) => t.id === taskId);
@@ -223,7 +225,7 @@ export const useAppStore = create<AppState>()(
           const activity = taskBefore
             ? {
                 id: `act-${Date.now()}`,
-                user: MEMBERS[0],
+                user: actor ?? MEMBERS[0],
                 action: "updated",
                 target: taskBefore.title,
                 createdAt: new Date().toISOString(),
@@ -241,7 +243,7 @@ export const useAppStore = create<AppState>()(
           };
         }),
 
-      moveTask: (taskId, newStatus) => {
+      moveTask: (taskId, newStatus, actor) => {
         const state = get();
         const tasksInColumn = state.tasks.filter((t) => t.status === newStatus);
         set((s) => {
@@ -252,7 +254,7 @@ export const useAppStore = create<AppState>()(
           const activity = taskBefore
             ? {
                 id: `act-${Date.now()}`,
-                user: MEMBERS[0],
+                user: actor ?? MEMBERS[0],
                 action: "moved",
                 target: `${taskBefore.title} to ${newStatus}`,
                 createdAt: new Date().toISOString(),
@@ -284,7 +286,7 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ columns: [...s.columns, newColumn] }));
       },
 
-      addTask: (task) => {
+      addTask: (task, actor) => {
         const state = get();
         const tasksInColumn = state.tasks.filter((t) => t.status === task.status);
         const newTask: Task = {
@@ -295,7 +297,7 @@ export const useAppStore = create<AppState>()(
         set((s) => {
           const activity = {
             id: `act-${Date.now()}`,
-            user: MEMBERS[0],
+            user: actor ?? MEMBERS[0],
             action: "added",
             target: newTask.title,
             createdAt: new Date().toISOString(),
@@ -310,14 +312,14 @@ export const useAppStore = create<AppState>()(
         });
       },
 
-      deleteTask: (taskId) =>
+      deleteTask: (taskId, actor) =>
         set((s) => {
           const taskBefore = s.tasks.find((t) => t.id === taskId);
           const tasks = s.tasks.filter((t) => t.id !== taskId);
           const activity = taskBefore
             ? {
                 id: `act-${Date.now()}`,
-                user: MEMBERS[0],
+                user: actor ?? MEMBERS[0],
                 action: "deleted",
                 target: taskBefore.title,
                 createdAt: new Date().toISOString(),
@@ -335,10 +337,10 @@ export const useAppStore = create<AppState>()(
           };
         }),
 
-      addComment: (taskId, text) => {
+      addComment: (taskId, text, actor) => {
         const newComment: Comment = {
           id: `comment-${Date.now()}`,
-          author: MEMBERS[0],
+          author: actor ?? MEMBERS[0],
           text,
           createdAt: new Date().toISOString(),
         };
@@ -350,7 +352,7 @@ export const useAppStore = create<AppState>()(
           const activity = taskBefore
             ? {
                 id: `act-${Date.now()}`,
-                user: MEMBERS[0],
+                user: actor ?? MEMBERS[0],
                 action: "commented on",
                 target: taskBefore.title,
                 createdAt: new Date().toISOString(),

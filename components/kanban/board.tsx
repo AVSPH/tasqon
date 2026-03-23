@@ -13,6 +13,7 @@ import { TaskModal } from "../modals/task-modal";
 import { useAppStore } from "@/lib/store";
 import { Task, TaskStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/components/auth-provider";
 
 export function Board() {
   const tasks = useAppStore((s) => s.tasks);
@@ -25,6 +26,36 @@ export function Board() {
   const columns = useAppStore((s) => s.columns);
   const addColumn = useAppStore((s) => s.addColumn);
   const preferences = useAppStore((s) => s.preferences);
+  const { user } = useAuth();
+
+  const actor = useMemo(() => {
+    if (!user) return null;
+    const name =
+      (user.user_metadata?.full_name as string | undefined) ??
+      user.email?.split("@")[0] ??
+      "User";
+    const initials = name
+      .split(/[._\s-]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "U";
+    const palette = ["#14b8a6", "#0ea5e9", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6"];
+    let hash = 0;
+    for (let i = 0; i < name.length; i += 1) {
+      hash = (hash << 5) - hash + name.charCodeAt(i);
+      hash |= 0;
+    }
+    const color = palette[Math.abs(hash) % palette.length];
+    return {
+      id: user.id,
+      name,
+      avatar: "",
+      color,
+      role: "Member",
+      initials,
+    };
+  }, [user]);
 
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [addingColumn, setAddingColumn] = useState(false);
@@ -67,14 +98,14 @@ export function Board() {
     // Over a column
     const overColumn = columns.find((c) => c.id === overId);
     if (overColumn && activeTask.status !== overColumn.id) {
-      moveTask(activeId, overColumn.id);
+      moveTask(activeId, overColumn.id, actor ?? undefined);
       return;
     }
 
     // Over another task
     const overTask = tasks.find((t) => t.id === overId);
     if (overTask && overTask.status !== activeTask.status) {
-      moveTask(activeId, overTask.status);
+      moveTask(activeId, overTask.status, actor ?? undefined);
     }
   };
 

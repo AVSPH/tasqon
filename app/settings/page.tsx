@@ -1,25 +1,45 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { User, SlidersHorizontal, ShieldCheck } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/components/auth-provider";
+import { updateUserProfile } from "@/lib/auth";
+import { toast } from "sonner";
 
 export default function SettingsPage() {
-  const authUser = useAppStore((s) => s.authUser);
-  const isAuthenticated = useAppStore((s) => s.isAuthenticated);
+  const { user, isAuthenticated, isLoading, signOut } = useAuth();
   const preferences = useAppStore((s) => s.preferences);
   const updatePreferences = useAppStore((s) => s.updatePreferences);
-  const updateAuthProfile = useAppStore((s) => s.updateAuthProfile);
-  const signOut = useAppStore((s) => s.signOut);
 
-  const [name, setName] = useState(authUser?.name ?? "Test User");
-  const [email, setEmail] = useState(authUser?.email ?? "test@test.com");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [saved, setSaved] = useState(false);
 
-  const handleSave = () => {
-    updateAuthProfile(name, email);
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 1500);
+  useEffect(() => {
+    if (user) {
+      setName((user.user_metadata?.full_name as string) ?? "");
+      setEmail(user.email ?? "");
+    } else {
+      setName("");
+      setEmail("");
+    }
+  }, [user]);
+
+  const handleSave = async () => {
+    if (!user) return;
+    try {
+      await updateUserProfile({
+        fullName: name.trim() || undefined,
+        email: email.trim() || undefined,
+      });
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 1500);
+      toast.success("Profile updated");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Update failed";
+      toast.error(message);
+    }
   };
 
   return (
@@ -49,7 +69,7 @@ export default function SettingsPage() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full h-9 mt-1 px-3 rounded-lg bg-white/70 border border-white/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400/30"
-                  disabled={!isAuthenticated}
+                  disabled={!isAuthenticated || isLoading}
                 />
               </div>
               <div>
@@ -58,14 +78,14 @@ export default function SettingsPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full h-9 mt-1 px-3 rounded-lg bg-white/70 border border-white/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400/30"
-                  disabled={!isAuthenticated}
+                  disabled={!isAuthenticated || isLoading}
                 />
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleSave}
                   className="h-8 px-3 rounded-lg bg-brand-500 text-white text-xs font-medium hover:bg-brand-600 transition-colors"
-                  disabled={!isAuthenticated}
+                  disabled={!isAuthenticated || isLoading}
                 >
                   Save changes
                 </button>
@@ -86,11 +106,27 @@ export default function SettingsPage() {
             </div>
 
             <div className="space-y-3">
+              <div className="rounded-xl border border-white/70 bg-white/70 px-3 py-2.5">
+                <label className="text-xs text-slate-500">Theme</label>
+                <select
+                  value={preferences.theme}
+                  onChange={(e) =>
+                    updatePreferences({
+                      theme: e.target.value as typeof preferences.theme,
+                    })
+                  }
+                  className="w-full h-9 mt-1 px-3 rounded-lg bg-white/70 border border-white/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400/30"
+                >
+                  <option value="mist">Mist (light, airy)</option>
+                  <option value="linen">Linen (warm light)</option>
+                  <option value="dark">Midnight (dark)</option>
+                </select>
+              </div>
               {[
                 {
                   id: "compactMode",
                   label: "Compact board spacing",
-                  description: "Reduce padding and gaps in the Kanban board.",
+                  description: "Reduce padding and gaps in the Project board.",
                 },
                 {
                   id: "showCompleted",
@@ -142,7 +178,7 @@ export default function SettingsPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <p className="text-sm text-slate-700">Signed in as</p>
-              <p className="text-xs text-slate-400">{authUser?.email ?? "test@test.com"}</p>
+              <p className="text-xs text-slate-400">{user?.email ?? "Not signed in"}</p>
             </div>
             <button
               onClick={signOut}

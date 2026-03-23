@@ -8,6 +8,7 @@ import { cn, PRIORITY_CONFIG, formatDate, isOverdue, timeAgo } from "@/lib/utils
 import { useAppStore } from "@/lib/store";
 import { MEMBERS } from "@/lib/mock-data";
 import { TaskModal } from "@/components/modals/task-modal";
+import { useAuth } from "@/components/auth-provider";
 
 export default function DashboardPage() {
   const tasks = useAppStore((s) => s.tasks);
@@ -16,6 +17,11 @@ export default function DashboardPage() {
   const projects = useAppStore((s) => s.projects);
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   const activeProject = projects.find((p) => p.id === activeProjectId);
+  const { user } = useAuth();
+  const displayName =
+    (user?.user_metadata?.full_name as string | undefined) ??
+    user?.email?.split("@")[0] ??
+    "there";
 
   const today = new Date().toISOString().split("T")[0];
   const dueTodayTasks = tasks.filter((t) => t.dueDate === today && t.status !== "done");
@@ -39,7 +45,7 @@ export default function DashboardPage() {
           {/* Welcome */}
           <div>
             <h1 className="font-display font-bold text-2xl text-slate-800">
-              Good morning, Alex 👋
+              Good morning, {displayName} 👋
             </h1>
             <p className="text-slate-400 text-sm mt-1">
               Here's what's happening with your projects today.

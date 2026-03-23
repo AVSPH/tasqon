@@ -6,6 +6,55 @@
   --sidebar-width: 240px;
   --sidebar-collapsed-width: 64px;
   --navbar-height: 60px;
+  --body-bg: linear-gradient(135deg, #f6fbff 0%, #f4fbf7 55%, #fff6f2 100%);
+  --body-text: #0f172a;
+  --shell-bg: radial-gradient(circle at 10% 10%, rgba(45, 212, 191, 0.18), transparent 45%),
+    radial-gradient(circle at 90% 20%, rgba(251, 191, 36, 0.12), transparent 40%),
+    radial-gradient(circle at 70% 90%, rgba(248, 113, 113, 0.12), transparent 45%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.4));
+  --shell-dots: radial-gradient(rgba(15, 23, 42, 0.06) 1px, transparent 1px);
+  --shell-dots-opacity: 0.35;
+  --scrollbar-thumb: #c5d3cd;
+  --scrollbar-thumb-hover: #a7b6b0;
+}
+
+.theme-mist {
+  --body-bg: linear-gradient(135deg, #f6fbff 0%, #f4fbf7 55%, #fff6f2 100%);
+  --body-text: #0f172a;
+  --shell-bg: radial-gradient(circle at 10% 10%, rgba(45, 212, 191, 0.18), transparent 45%),
+    radial-gradient(circle at 90% 20%, rgba(251, 191, 36, 0.12), transparent 40%),
+    radial-gradient(circle at 70% 90%, rgba(248, 113, 113, 0.12), transparent 45%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.4));
+  --shell-dots: radial-gradient(rgba(15, 23, 42, 0.06) 1px, transparent 1px);
+  --shell-dots-opacity: 0.35;
+  --scrollbar-thumb: #c5d3cd;
+  --scrollbar-thumb-hover: #a7b6b0;
+}
+
+.theme-linen {
+  --body-bg: linear-gradient(135deg, #fff7ee 0%, #f6f1e8 55%, #f3f8f5 100%);
+  --body-text: #1f2937;
+  --shell-bg: radial-gradient(circle at 12% 12%, rgba(251, 146, 60, 0.16), transparent 48%),
+    radial-gradient(circle at 88% 18%, rgba(45, 212, 191, 0.12), transparent 42%),
+    radial-gradient(circle at 70% 85%, rgba(168, 85, 247, 0.08), transparent 45%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.35));
+  --shell-dots: radial-gradient(rgba(31, 41, 55, 0.07) 1px, transparent 1px);
+  --shell-dots-opacity: 0.3;
+  --scrollbar-thumb: #d3c7b8;
+  --scrollbar-thumb-hover: #bbae9f;
+}
+
+.theme-dark {
+  --body-bg: linear-gradient(135deg, #0b1220 0%, #111827 55%, #0f172a 100%);
+  --body-text: #e2e8f0;
+  --shell-bg: radial-gradient(circle at 15% 15%, rgba(45, 212, 191, 0.16), transparent 45%),
+    radial-gradient(circle at 85% 15%, rgba(96, 165, 250, 0.18), transparent 40%),
+    radial-gradient(circle at 70% 85%, rgba(248, 113, 113, 0.14), transparent 45%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.85), rgba(30, 41, 59, 0.7));
+  --shell-dots: radial-gradient(rgba(148, 163, 184, 0.2) 1px, transparent 1px);
+  --shell-dots-opacity: 0.25;
+  --scrollbar-thumb: #475569;
+  --scrollbar-thumb-hover: #64748b;
 }
 
 * {
@@ -18,19 +67,15 @@ html, body {
 }
 
 body {
-  background: linear-gradient(135deg, #f6fbff 0%, #f4fbf7 55%, #fff6f2 100%);
-  color: #0f172a;
+  background: var(--body-bg);
+  color: var(--body-text);
   font-family: var(--font-montserrat), system-ui, sans-serif;
 }
 
 .app-shell {
   position: relative;
   isolation: isolate;
-  background:
-    radial-gradient(circle at 10% 10%, rgba(45, 212, 191, 0.18), transparent 45%),
-    radial-gradient(circle at 90% 20%, rgba(251, 191, 36, 0.12), transparent 40%),
-    radial-gradient(circle at 70% 90%, rgba(248, 113, 113, 0.12), transparent 45%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.4));
+  background: var(--shell-bg);
 }
 
 .app-shell::after {
@@ -38,9 +83,9 @@ body {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background-image: radial-gradient(rgba(15, 23, 42, 0.06) 1px, transparent 1px);
+  background-image: var(--shell-dots);
   background-size: 120px 120px;
-  opacity: 0.35;
+  opacity: var(--shell-dots-opacity);
   pointer-events: none;
 }
 
@@ -58,11 +103,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #c5d3cd;
+  background: var(--scrollbar-thumb);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #a7b6b0;
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* Smooth transitions */

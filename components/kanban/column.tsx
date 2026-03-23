@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Plus, MoreHorizontal, X } from "lucide-react";
@@ -9,6 +9,7 @@ import { TaskCard } from "./task-card";
 import { useAppStore } from "@/lib/store";
 import { MEMBERS } from "@/lib/mock-data";
 import { TAGS } from "@/lib/mock-data";
+import { useAuth } from "@/components/auth-provider";
 
 interface ColumnProps {
   id: ColumnId;
@@ -23,6 +24,36 @@ export function Column({ id, title, color, dotColor, headerBg, tasks }: ColumnPr
   const [addingTask, setAddingTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const addTask = useAppStore((s) => s.addTask);
+  const { user } = useAuth();
+
+  const actor = useMemo(() => {
+    if (!user) return null;
+    const name =
+      (user.user_metadata?.full_name as string | undefined) ??
+      user.email?.split("@")[0] ??
+      "User";
+    const initials = name
+      .split(/[._\s-]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "U";
+    const palette = ["#14b8a6", "#0ea5e9", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6"];
+    let hash = 0;
+    for (let i = 0; i < name.length; i += 1) {
+      hash = (hash << 5) - hash + name.charCodeAt(i);
+      hash |= 0;
+    }
+    const color = palette[Math.abs(hash) % palette.length];
+    return {
+      id: user.id,
+      name,
+      avatar: "",
+      color,
+      role: "Member",
+      initials,
+    };
+  }, [user]);
 
   const { setNodeRef, isOver } = useDroppable({ id, data: { type: "column", columnId: id } });
 
@@ -33,13 +64,13 @@ export function Column({ id, title, color, dotColor, headerBg, tasks }: ColumnPr
       description: "",
       status: id,
       priority: "medium",
-      assignees: [MEMBERS[0]],
+      assignees: actor ? [actor] : [MEMBERS[0]],
       dueDate: null,
       checklist: [],
       comments: [],
       attachments: [],
       tags: [],
-    });
+    }, actor ?? undefined);
     setNewTaskTitle("");
     setAddingTask(false);
   };

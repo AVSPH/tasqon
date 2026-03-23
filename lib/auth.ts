@@ -41,6 +41,25 @@ export async function signOut() {
 }
 
 /**
+ * Update the current user's profile.
+ * Note: email changes may require confirmation depending on Supabase settings.
+ */
+export async function updateUserProfile({
+  fullName,
+  email,
+}: {
+  fullName?: string;
+  email?: string;
+}) {
+  const { data, error } = await supabase.auth.updateUser({
+    email,
+    data: fullName ? { full_name: fullName } : undefined,
+  });
+  if (error) throw error;
+  return data;
+}
+
+/**
  * Sign in with Google OAuth.
  */
 export async function signInWithGoogle(redirectTo?: string) {
