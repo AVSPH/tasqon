@@ -2,18 +2,27 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { useAppStore } from "@/lib/store";
+import { useAuth } from "@/components/auth-provider";
 
 interface AuthGateProps {
   children: React.ReactNode;
 }
 
 export function AuthGate({ children }: AuthGateProps) {
-  const isAuthenticated = useAppStore((s) => s.isAuthenticated);
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <div className="relative flex-1 min-h-0">{children}</div>;
+  }
 
   return (
     <div className="relative flex-1 min-h-0">
-      <div className={cn("h-full", !isAuthenticated && "pointer-events-none blur-[2px]")}> 
+      <div
+        className={cn(
+          "h-full",
+          !isAuthenticated && "pointer-events-none blur-[2px]",
+        )}
+      >
         {children}
       </div>
       {!isAuthenticated && (
@@ -22,8 +31,12 @@ export function AuthGate({ children }: AuthGateProps) {
             <div className="w-12 h-12 rounded-2xl bg-white/70 border border-white/70 flex items-center justify-center mx-auto mb-4">
               <span className="text-xl">🔒</span>
             </div>
-            <h2 className="font-display font-semibold text-slate-800 text-lg">Sign in to continue</h2>
-            <p className="text-sm text-slate-400 mt-1">Your data is hidden until you sign in.</p>
+            <h2 className="font-display font-semibold text-slate-800 text-lg">
+              Sign in to continue
+            </h2>
+            <p className="text-sm text-slate-400 mt-1">
+              Your data is hidden until you sign in.
+            </p>
           </div>
         </div>
       )}

@@ -18,7 +18,6 @@ import { Priority } from "@/lib/types";
 // backend
 import { useAuth } from "../auth-provider";
 import { useLogin } from "@/hooks/auth/useLogin";
-import type { LoginFormValues } from "@/types/auth";
 import { toast } from "sonner";
 import { signInWithGoogle } from "@/lib/auth";
 
@@ -48,11 +47,6 @@ export function Navbar() {
   const filterPriority = useAppStore((s) => s.filterPriority);
   const setSearchQuery = useAppStore((s) => s.setSearchQuery);
   const setFilterPriority = useAppStore((s) => s.setFilterPriority);
-  const authUser = useAppStore((s) => s.authUser);
-  const signIn = useAppStore((s) => s.signIn);
-  const signOut = useAppStore((s) => s.signOut);
-  const touchSession = useAppStore((s) => s.touchSession);
-  const checkSession = useAppStore((s) => s.checkSession);
   const sessionExpired = useAppStore((s) => s.sessionExpired);
   const projects = useAppStore((s) => s.projects);
   const activeProjectId = useAppStore((s) => s.activeProjectId);
@@ -76,13 +70,21 @@ export function Navbar() {
   //   }
   // }, [sessionExpired]);
 
-  // Handle Authenticaion
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const { session, isLoading } = useAuth();
+  // Handle Authentication
+  const { session, isLoading, signOut } = useAuth();
+  const isAuthenticated = !!session;
+  const userEmail = session?.user?.email ?? "test@test.com";
+  const userInitials =
+    userEmail
+      .split("@")[0]
+      .split(/[._-]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "TU";
 
   useEffect(() => {
     if (!session && !isLoading) {
-      setIsAuthenticated(false);
       toast.warning("Please login first");
     }
   }, [session, isLoading]);
@@ -90,30 +92,40 @@ export function Navbar() {
   // Handle Login
   const { mutate: login, isPending, isError, error } = useLogin();
   const handleLogin = useCallback(() => {
+    const normalizedEmail = authEmail.trim().toLowerCase();
+
+    if (!normalizedEmail || !authPassword) {
+      setAuthError("Email and password are required");
+      return;
+    }
+
     const payload = {
-      email: authEmail,
+      email: normalizedEmail,
       password: authPassword,
     };
 
     login(payload, {
       onSuccess: () => {
-        setIsAuthenticated(true);
+        setAuthError("");
+        setShowAuthModal(false);
         toast.success("Login Successfully");
       },
       onError: (error) => {
+        setAuthError(error.message);
         toast.error(`Something went wrong: ${error.message}`);
       },
     });
-  }, []);
+  }, [authEmail, authPassword, login]);
 
   const handleGoogleSignIn = useCallback(async () => {
     setIsGoogleLoading(true);
     try {
       await signInWithGoogle(window.location.origin);
     } catch (signInError) {
-      const message = signInError instanceof Error
-        ? signInError.message
-        : "Google sign-in failed";
+      const message =
+        signInError instanceof Error
+          ? signInError.message
+          : "Google sign-in failed";
       toast.error(message);
     } finally {
       setIsGoogleLoading(false);
@@ -295,7 +307,7 @@ export function Navbar() {
                 className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white"
                 style={{ backgroundColor: "#14b8a6" }}
               >
-                {authUser?.initials ?? "TU"}
+                {userInitials}
               </div>
               <ChevronDown className="w-3 h-3 text-slate-400" />
             </button>
@@ -304,13 +316,13 @@ export function Navbar() {
                 <div className="px-2.5 py-2">
                   <p className="text-xs text-slate-400">Signed in as</p>
                   <p className="text-sm font-semibold text-slate-800 truncate">
-                    {authUser?.email ?? "test@test.com"}
+                    {userEmail}
                   </p>
                 </div>
                 <div className="h-px bg-white/70 my-1" />
                 <button
-                  onClick={() => {
-                    signOut();
+                  onClick={async () => {
+                    await signOut();
                     setShowUserMenu(false);
                   }}
                   className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm text-slate-700 hover:bg-white/70 transition-colors"
@@ -359,8 +371,12 @@ export function Navbar() {
               <input
                 type="email"
                 placeholder="Email"
+                disabled={isPending}
                 value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
+                onChange={(e) => {
+                  setAuthEmail(e.target.value);
+                  if (authError) setAuthError("");
+                }}
                 className="w-full h-9 px-3 rounded-lg bg-white/70 border border-white/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400/30 focus:border-brand-400"
               />
               <input
@@ -368,15 +384,19 @@ export function Navbar() {
                 placeholder="Password"
                 disabled={isPending}
                 value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
+                onChange={(e) => {
+                  setAuthPassword(e.target.value);
+                  if (authError) setAuthError("");
+                }}
                 className="w-full h-9 px-3 rounded-lg bg-white/70 border border-white/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400/30 focus:border-brand-400"
               />
               {authError && <p className="text-xs text-red-500">{authError}</p>}
               <button
                 onClick={handleLogin}
+                disabled={isPending}
                 className="w-full h-9 rounded-lg bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 transition-colors"
               >
-                Sign in
+                {isPending ? "Signing in..." : "Sign in"}
               </button>
               <div className="flex items-center gap-3">
                 <span className="h-px flex-1 bg-slate-200" />
@@ -391,11 +411,27 @@ export function Navbar() {
                 className="w-full h-9 rounded-lg bg-white/80 border border-white/70 text-sm font-medium text-slate-700 hover:bg-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <span className="w-4 h-4">
-                  <svg viewBox="0 0 48 48" className="w-4 h-4" aria-hidden="true">
-                    <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303C33.59 32.88 29.172 36 24 36c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.273 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.651-.389-3.917z"/>
-                    <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.702 16.108 19.012 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.273 4 24 4 16.319 4 9.655 8.338 6.306 14.691z"/>
-                    <path fill="#4CAF50" d="M24 44c5.084 0 9.804-1.943 13.314-5.116l-6.149-5.207C29.06 35.091 26.65 36 24 36c-5.138 0-9.534-3.084-11.273-7.494l-6.528 5.028C9.518 39.556 16.227 44 24 44z"/>
-                    <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-0.82 2.27-2.358 4.192-4.338 5.677l6.149 5.207C39.591 36.635 44 31.091 44 24c0-1.341-.138-2.651-.389-3.917z"/>
+                  <svg
+                    viewBox="0 0 48 48"
+                    className="w-4 h-4"
+                    aria-hidden="true"
+                  >
+                    <path
+                      fill="#FFC107"
+                      d="M43.611 20.083H42V20H24v8h11.303C33.59 32.88 29.172 36 24 36c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.273 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.651-.389-3.917z"
+                    />
+                    <path
+                      fill="#FF3D00"
+                      d="M6.306 14.691l6.571 4.819C14.702 16.108 19.012 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.273 4 24 4 16.319 4 9.655 8.338 6.306 14.691z"
+                    />
+                    <path
+                      fill="#4CAF50"
+                      d="M24 44c5.084 0 9.804-1.943 13.314-5.116l-6.149-5.207C29.06 35.091 26.65 36 24 36c-5.138 0-9.534-3.084-11.273-7.494l-6.528 5.028C9.518 39.556 16.227 44 24 44z"
+                    />
+                    <path
+                      fill="#1976D2"
+                      d="M43.611 20.083H42V20H24v8h11.303c-0.82 2.27-2.358 4.192-4.338 5.677l6.149 5.207C39.591 36.635 44 31.091 44 24c0-1.341-.138-2.651-.389-3.917z"
+                    />
                   </svg>
                 </span>
                 Continue with Google
