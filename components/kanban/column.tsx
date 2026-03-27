@@ -23,7 +23,10 @@ export function Column({ id, title, color, dotColor, headerBg, tasks }: ColumnPr
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const addTask = useAppStore((s) => s.addTask);
   const members = useAppStore((s) => s.members);
+  const currentMemberRole = useAppStore((s) => s.currentMemberRole);
   const { user } = useAuth();
+
+  const canEditTask = currentMemberRole === "owner";
 
   const actor = useMemo(() => {
     if (!user) return null;
@@ -111,7 +114,7 @@ export function Column({ id, title, color, dotColor, headerBg, tasks }: ColumnPr
             ))}
 
             {/* Add task inline */}
-            {addingTask ? (
+            {addingTask && canEditTask ? (
               <div className="bg-white/85 backdrop-blur-xl rounded-2xl border border-brand-200 shadow-card p-3 animate-scale-in">
                 <textarea
                   autoFocus
@@ -142,8 +145,14 @@ export function Column({ id, title, color, dotColor, headerBg, tasks }: ColumnPr
               </div>
             ) : (
               <button
-                onClick={() => setAddingTask(true)}
-                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-slate-500 hover:text-slate-700 hover:bg-white/70 border border-dashed border-white/80 hover:border-brand-300 transition-all group"
+                onClick={() => { if (canEditTask) setAddingTask(true); }}
+                className={cn(
+                  "w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm border border-dashed transition-all group",
+                  canEditTask
+                    ? "text-slate-500 hover:text-slate-700 hover:bg-white/70 border-white/80 hover:border-brand-300"
+                    : "text-slate-300 cursor-not-allowed border-white/60"
+                )}
+                aria-disabled={!canEditTask}
               >
                 <Plus className="w-3.5 h-3.5 group-hover:text-brand-500 transition-colors" />
                 Add task

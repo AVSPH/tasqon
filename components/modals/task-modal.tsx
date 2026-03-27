@@ -24,7 +24,10 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
   const columns = useAppStore((s) => s.columns);
   const members = useAppStore((s) => s.members);
   const tags = useAppStore((s) => s.tags);
+  const currentMemberRole = useAppStore((s) => s.currentMemberRole);
   const { user } = useAuth();
+
+  const canEditTask = currentMemberRole === "owner";
 
   const actor = useMemo(() => {
     if (!user) return null;
@@ -55,8 +58,10 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
     };
   }, [user]);
 
-  const updateTaskWithActor = (updates: Partial<Task>) =>
+  const updateTaskWithActor = (updates: Partial<Task>) => {
+    if (!canEditTask) return;
     void updateTask(task.id, updates, actor ?? undefined);
+  };
 
   const [commentText, setCommentText] = useState("");
   const [newCheckItem, setNewCheckItem] = useState("");
@@ -84,11 +89,13 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
   }, [editingTitle]);
 
   const handleTitleSave = () => {
+    if (!canEditTask) return;
     if (titleValue.trim()) updateTaskWithActor({ title: titleValue });
     setEditingTitle(false);
   };
 
   const handleDescSave = () => {
+    if (!canEditTask) return;
     updateTaskWithActor({ description: descValue });
     setEditingDesc(false);
   };
@@ -100,6 +107,7 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
   };
 
   const handleAddChecklist = () => {
+    if (!canEditTask) return;
     if (!newCheckItem.trim()) return;
     void addChecklistItem(task.id, newCheckItem);
     setNewCheckItem("");
@@ -107,6 +115,7 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
   };
 
   const handleToggleAssignee = (memberId: string) => {
+    if (!canEditTask) return;
     const isAssigned = task.assignees.some((a) => a.id === memberId);
     const member = members.find((m) => m.id === memberId);
     if (!member) return;
@@ -117,6 +126,7 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
   };
 
   const handleToggleTag = (tagId: string) => {
+    if (!canEditTask) return;
     const hasTag = task.tags.some((t) => t.id === tagId);
     const tag = tags.find((t) => t.id === tagId);
     if (!tag) return;
@@ -142,8 +152,12 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
             {/* Status badge */}
             <div className="relative">
               <button
-                onClick={() => setShowStatusPicker(!showStatusPicker)}
-                className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-white/70 border border-white/70 text-xs font-medium text-slate-600 hover:bg-white/90 transition-colors"
+                onClick={() => { if (canEditTask) setShowStatusPicker(!showStatusPicker); }}
+                className={cn(
+                  "flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-white/70 border border-white/70 text-xs font-medium text-slate-600 transition-colors",
+                  canEditTask ? "hover:bg-white/90" : "cursor-not-allowed opacity-60"
+                )}
+                aria-disabled={!canEditTask}
               >
                 <span className={cn(
                   "w-1.5 h-1.5 rounded-full",
@@ -152,7 +166,7 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
                 {columns.find((c) => c.id === task.status)?.title}
                 <ChevronDown className="w-3 h-3 text-slate-400" />
               </button>
-              {showStatusPicker && (
+              {showStatusPicker && canEditTask && (
                 <div className="absolute top-8 left-0 z-10 bg-white/90 backdrop-blur-xl rounded-xl shadow-modal border border-white/70 p-1.5 min-w-[150px] animate-scale-in">
                   {columns.map((col) => (
                     <button
@@ -175,17 +189,19 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
             {/* Priority */}
             <div className="relative">
               <button
-                onClick={() => setShowPriorityPicker(!showPriorityPicker)}
+                onClick={() => { if (canEditTask) setShowPriorityPicker(!showPriorityPicker); }}
                 className={cn(
                   "flex items-center gap-1 h-7 px-2 rounded-lg text-xs font-semibold border transition-colors",
-                  priority.color, priority.bg
+                  priority.color, priority.bg,
+                  canEditTask ? "" : "cursor-not-allowed opacity-60"
                 )}
+                aria-disabled={!canEditTask}
               >
                 <span className={cn("w-1.5 h-1.5 rounded-full", priority.dot)} />
                 {priority.label}
                 <ChevronDown className="w-3 h-3 opacity-50" />
               </button>
-              {showPriorityPicker && (
+              {showPriorityPicker && canEditTask && (
                 <div className="absolute top-8 left-0 z-10 bg-white/90 backdrop-blur-xl rounded-xl shadow-modal border border-white/70 p-1.5 min-w-[140px] animate-scale-in">
                   {(Object.keys(PRIORITY_CONFIG) as Priority[]).map((p) => {
                     const conf = PRIORITY_CONFIG[p];
@@ -207,12 +223,14 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => { void deleteTask(task.id, actor ?? undefined); onClose(); }}
-              className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {canEditTask && (
+              <button
+                onClick={() => { void deleteTask(task.id, actor ?? undefined); onClose(); }}
+                className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={onClose}
               className="w-8 h-8 rounded-lg hover:bg-white/70 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
@@ -227,7 +245,7 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
           <div className="px-6 py-5 space-y-6">
             {/* Title */}
             <div>
-              {editingTitle ? (
+              {editingTitle && canEditTask ? (
                 <input
                   ref={titleRef}
                   value={titleValue}
@@ -238,13 +256,18 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
                 />
               ) : (
                 <div
-                  onClick={() => setEditingTitle(true)}
-                  className="group flex items-start gap-2 cursor-text"
+                  onClick={() => { if (canEditTask) setEditingTitle(true); }}
+                  className={cn(
+                    "group flex items-start gap-2",
+                    canEditTask ? "cursor-text" : "cursor-default"
+                  )}
                 >
                   <h2 className="font-display font-bold text-xl text-slate-800 leading-snug flex-1">
                     {task.title}
                   </h2>
-                  <Edit2 className="w-4 h-4 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity mt-1 shrink-0" />
+                  {canEditTask && (
+                    <Edit2 className="w-4 h-4 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity mt-1 shrink-0" />
+                  )}
                 </div>
               )}
             </div>
@@ -261,7 +284,11 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
                   type="date"
                   value={task.dueDate || ""}
                   onChange={(e) => updateTaskWithActor({ dueDate: e.target.value || null })}
-                  className="text-sm font-medium text-slate-700 bg-transparent focus:outline-none cursor-pointer"
+                  className={cn(
+                    "text-sm font-medium text-slate-700 bg-transparent focus:outline-none",
+                    canEditTask ? "cursor-pointer" : "cursor-not-allowed opacity-70"
+                  )}
+                  disabled={!canEditTask}
                 />
               </div>
 
@@ -274,12 +301,16 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
                   </div>
                   <div className="relative">
                     <button
-                      onClick={() => setShowMemberPicker(!showMemberPicker)}
-                      className="w-5 h-5 rounded-full bg-white/80 border border-white/70 flex items-center justify-center hover:bg-brand-50 hover:border-brand-300 transition-colors"
+                      onClick={() => { if (canEditTask) setShowMemberPicker(!showMemberPicker); }}
+                      className={cn(
+                        "w-5 h-5 rounded-full bg-white/80 border border-white/70 flex items-center justify-center transition-colors",
+                        canEditTask ? "hover:bg-brand-50 hover:border-brand-300" : "cursor-not-allowed opacity-60"
+                      )}
+                      aria-disabled={!canEditTask}
                     >
                       <Plus className="w-3 h-3 text-slate-400 hover:text-brand-500" />
                     </button>
-                    {showMemberPicker && (
+                    {showMemberPicker && canEditTask && (
                       <div className="absolute top-6 right-0 z-10 bg-white/90 backdrop-blur-xl rounded-xl shadow-modal border border-white/70 p-2 w-52 animate-scale-in">
                         {members.map((m) => {
                           const assigned = task.assignees.some((a) => a.id === m.id);
@@ -334,12 +365,16 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
                 </div>
                 <div className="relative">
                   <button
-                    onClick={() => setShowTagPicker(!showTagPicker)}
-                    className="w-5 h-5 rounded-full bg-white/70 flex items-center justify-center hover:bg-brand-50 transition-colors"
+                    onClick={() => { if (canEditTask) setShowTagPicker(!showTagPicker); }}
+                    className={cn(
+                      "w-5 h-5 rounded-full bg-white/70 flex items-center justify-center transition-colors",
+                      canEditTask ? "hover:bg-brand-50" : "cursor-not-allowed opacity-60"
+                    )}
+                    aria-disabled={!canEditTask}
                   >
                     <Plus className="w-3 h-3 text-slate-400" />
                   </button>
-                  {showTagPicker && (
+                  {showTagPicker && canEditTask && (
                     <div className="absolute top-6 right-0 z-10 bg-white/90 backdrop-blur-xl rounded-xl shadow-modal border border-white/70 p-2 w-44 animate-scale-in">
                       {tags.map((tag) => {
                         const hasTag = task.tags.some((t) => t.id === tag.id);
@@ -371,10 +406,10 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
                     key={tag.id}
                     className="inline-flex items-center h-6 px-2.5 rounded-full text-xs font-semibold cursor-pointer hover:opacity-80 transition-opacity"
                     style={{ backgroundColor: tag.color + "18", color: tag.color }}
-                    onClick={() => handleToggleTag(tag.id)}
+                    onClick={() => { if (canEditTask) handleToggleTag(tag.id); }}
                   >
                     {tag.label}
-                    <X className="w-3 h-3 ml-1" />
+                    {canEditTask && <X className="w-3 h-3 ml-1" />}
                   </span>
                 ))}
               </div>
@@ -386,7 +421,7 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
                 <AlignLeft className="w-3.5 h-3.5" />
                 Description
               </div>
-              {editingDesc ? (
+              {editingDesc && canEditTask ? (
                 <div>
                   <textarea
                     autoFocus
@@ -407,8 +442,11 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
                 </div>
               ) : (
                 <div
-                  onClick={() => setEditingDesc(true)}
-                  className="px-3 py-2.5 rounded-xl bg-white/70 hover:bg-white/90 transition-colors cursor-text min-h-[60px]"
+                  onClick={() => { if (canEditTask) setEditingDesc(true); }}
+                  className={cn(
+                    "px-3 py-2.5 rounded-xl bg-white/70 transition-colors min-h-[60px]",
+                    canEditTask ? "hover:bg-white/90 cursor-text" : "cursor-default"
+                  )}
                 >
                   <p className="text-sm text-slate-600 leading-relaxed">
                     {task.description || <span className="text-slate-400">Add a description…</span>}
@@ -431,13 +469,15 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
                     </span>
                   )}
                 </div>
-                <button
-                  onClick={() => setAddingCheck(true)}
-                  className="flex items-center gap-1 text-xs text-brand-500 hover:text-brand-700 font-medium transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add item
-                </button>
+                {canEditTask && (
+                  <button
+                    onClick={() => setAddingCheck(true)}
+                    className="flex items-center gap-1 text-xs text-brand-500 hover:text-brand-700 font-medium transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add item
+                  </button>
+                )}
               </div>
 
               {/* Progress bar */}
@@ -477,7 +517,7 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
                   </div>
                 ))}
 
-                {addingCheck && (
+                {addingCheck && canEditTask && (
                   <div className="flex items-center gap-2.5 px-2 py-1">
                     <div className="w-4 h-4 rounded border border-slate-300 shrink-0" />
                     <input

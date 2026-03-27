@@ -38,6 +38,7 @@ export async function POST(request: Request) {
   });
 
   const origin = request.headers.get("origin") ?? undefined;
+  const redirectTo = origin ? `${origin}/invites` : undefined;
 
   const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(
     email,
@@ -47,11 +48,14 @@ export async function POST(request: Request) {
         invited_by: user.id,
         role: "member",
       },
-      ...(origin ? { redirectTo: origin } : {}),
+      ...(redirectTo ? { redirectTo } : {}),
     },
   );
 
-  if (inviteError) {
+  const inviteAlreadyRegistered =
+    !!inviteError && /already been registered/i.test(inviteError.message);
+
+  if (inviteError && !inviteAlreadyRegistered) {
     return NextResponse.json({ error: inviteError.message }, { status: 400 });
   }
 

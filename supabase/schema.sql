@@ -252,13 +252,35 @@ as $$
   select exists (
     select 1
     from invites i
-    where i.project_id::uuid = pid
+    where i.project_id::text = pid::text
+      and lower(i.email) = lower(auth.email())
+      and i.status = 'sent'
+  );
+$$;
+
+create or replace function public.can_accept_invite(pid text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select exists (
+    select 1
+    from invites i
+    where i.project_id::text = pid
       and lower(i.email) = lower(auth.email())
       and i.status = 'sent'
   );
 $$;
 
 -- RLS policies
+drop policy if exists "profiles:self_read" on profiles;
+drop policy if exists "profiles:self_insert" on profiles;
+drop policy if exists "profiles:member_read" on profiles;
+drop policy if exists "profiles:self_update" on profiles;
+
 alter table profiles enable row level security;
 create policy "profiles:self_read" on profiles
   for select using (id = auth.uid());
@@ -279,6 +301,12 @@ create policy "profiles:self_update" on profiles
   for update using (id = auth.uid());
 
 alter table projects enable row level security;
+drop policy if exists "projects:member_select" on projects;
+drop policy if exists "projects:owner_select" on projects;
+drop policy if exists "projects:invitee_select" on projects;
+drop policy if exists "projects:insert" on projects;
+drop policy if exists "projects:owner_update" on projects;
+drop policy if exists "projects:owner_delete" on projects;
 create policy "projects:member_select" on projects
   for select using (public.is_project_member(id));
 create policy "projects:owner_select" on projects
@@ -293,6 +321,10 @@ create policy "projects:owner_delete" on projects
   for delete using (owner_id = auth.uid());
 
 alter table project_members enable row level security;
+drop policy if exists "members:project_select" on project_members;
+drop policy if exists "members:owner_insert" on project_members;
+drop policy if exists "members:invite_accept" on project_members;
+drop policy if exists "members:owner_delete" on project_members;
 create policy "members:project_select" on project_members
   for select using (public.is_project_member(project_id));
 create policy "members:owner_insert" on project_members
@@ -315,6 +347,10 @@ create policy "members:owner_delete" on project_members
   );
 
 alter table columns enable row level security;
+drop policy if exists "columns:member_select" on columns;
+drop policy if exists "columns:owner_write" on columns;
+drop policy if exists "columns:owner_update" on columns;
+drop policy if exists "columns:owner_delete" on columns;
 create policy "columns:member_select" on columns
   for select using (public.is_project_member(project_id));
 create policy "columns:owner_write" on columns
@@ -325,30 +361,41 @@ create policy "columns:owner_delete" on columns
   for delete using (public.is_project_owner(project_id));
 
 alter table tasks enable row level security;
+drop policy if exists "tasks:member_select" on tasks;
+drop policy if exists "tasks:owner_write" on tasks;
+drop policy if exists "tasks:owner_update" on tasks;
+drop policy if exists "tasks:owner_delete" on tasks;
 create policy "tasks:member_select" on tasks
   for select using (public.is_project_member(project_id));
-create policy "tasks:member_write" on tasks
-  for insert with check (public.is_project_member(project_id));
-create policy "tasks:member_update" on tasks
-  for update using (public.is_project_member(project_id));
-create policy "tasks:member_delete" on tasks
-  for delete using (public.is_project_member(project_id));
+create policy "tasks:owner_write" on tasks
+  for insert with check (public.is_project_owner(project_id));
+create policy "tasks:owner_update" on tasks
+  for update using (public.is_project_owner(project_id));
+create policy "tasks:owner_delete" on tasks
+  for delete using (public.is_project_owner(project_id));
 
 alter table task_assignees enable row level security;
+drop policy if exists "task_assignees:member_select" on task_assignees;
+drop policy if exists "task_assignees:owner_write" on task_assignees;
+drop policy if exists "task_assignees:owner_delete" on task_assignees;
 create policy "task_assignees:member_select" on task_assignees
   for select using (
     exists (select 1 from tasks t where t.id = task_assignees.task_id and public.is_project_member(t.project_id))
   );
-create policy "task_assignees:member_write" on task_assignees
+create policy "task_assignees:owner_write" on task_assignees
   for insert with check (
-    exists (select 1 from tasks t where t.id = task_assignees.task_id and public.is_project_member(t.project_id))
+    exists (select 1 from tasks t where t.id = task_assignees.task_id and public.is_project_owner(t.project_id))
   );
-create policy "task_assignees:member_delete" on task_assignees
+create policy "task_assignees:owner_delete" on task_assignees
   for delete using (
-    exists (select 1 from tasks t where t.id = task_assignees.task_id and public.is_project_member(t.project_id))
+    exists (select 1 from tasks t where t.id = task_assignees.task_id and public.is_project_owner(t.project_id))
   );
 
 alter table tags enable row level security;
+drop policy if exists "tags:member_select" on tags;
+drop policy if exists "tags:member_write" on tags;
+drop policy if exists "tags:member_update" on tags;
+drop policy if exists "tags:member_delete" on tags;
 create policy "tags:member_select" on tags
   for select using (public.is_project_member(project_id));
 create policy "tags:member_write" on tags
@@ -359,38 +406,49 @@ create policy "tags:member_delete" on tags
   for delete using (public.is_project_member(project_id));
 
 alter table task_tags enable row level security;
+drop policy if exists "task_tags:member_select" on task_tags;
+drop policy if exists "task_tags:owner_write" on task_tags;
+drop policy if exists "task_tags:owner_delete" on task_tags;
 create policy "task_tags:member_select" on task_tags
   for select using (
     exists (select 1 from tasks t where t.id = task_tags.task_id and public.is_project_member(t.project_id))
   );
-create policy "task_tags:member_write" on task_tags
+create policy "task_tags:owner_write" on task_tags
   for insert with check (
-    exists (select 1 from tasks t where t.id = task_tags.task_id and public.is_project_member(t.project_id))
+    exists (select 1 from tasks t where t.id = task_tags.task_id and public.is_project_owner(t.project_id))
   );
-create policy "task_tags:member_delete" on task_tags
+create policy "task_tags:owner_delete" on task_tags
   for delete using (
-    exists (select 1 from tasks t where t.id = task_tags.task_id and public.is_project_member(t.project_id))
+    exists (select 1 from tasks t where t.id = task_tags.task_id and public.is_project_owner(t.project_id))
   );
 
 alter table checklist_items enable row level security;
+drop policy if exists "checklist:member_select" on checklist_items;
+drop policy if exists "checklist:owner_write" on checklist_items;
+drop policy if exists "checklist:member_update" on checklist_items;
+drop policy if exists "checklist:owner_delete" on checklist_items;
 create policy "checklist:member_select" on checklist_items
   for select using (
     exists (select 1 from tasks t where t.id = checklist_items.task_id and public.is_project_member(t.project_id))
   );
-create policy "checklist:member_write" on checklist_items
+create policy "checklist:owner_write" on checklist_items
   for insert with check (
-    exists (select 1 from tasks t where t.id = checklist_items.task_id and public.is_project_member(t.project_id))
+    exists (select 1 from tasks t where t.id = checklist_items.task_id and public.is_project_owner(t.project_id))
   );
 create policy "checklist:member_update" on checklist_items
   for update using (
     exists (select 1 from tasks t where t.id = checklist_items.task_id and public.is_project_member(t.project_id))
   );
-create policy "checklist:member_delete" on checklist_items
+create policy "checklist:owner_delete" on checklist_items
   for delete using (
-    exists (select 1 from tasks t where t.id = checklist_items.task_id and public.is_project_member(t.project_id))
+    exists (select 1 from tasks t where t.id = checklist_items.task_id and public.is_project_owner(t.project_id))
   );
 
 alter table comments enable row level security;
+drop policy if exists "comments:member_select" on comments;
+drop policy if exists "comments:member_write" on comments;
+drop policy if exists "comments:owner_update" on comments;
+drop policy if exists "comments:owner_delete" on comments;
 create policy "comments:member_select" on comments
   for select using (
     exists (select 1 from tasks t where t.id = comments.task_id and public.is_project_member(t.project_id))
@@ -399,16 +457,19 @@ create policy "comments:member_write" on comments
   for insert with check (
     exists (select 1 from tasks t where t.id = comments.task_id and public.is_project_member(t.project_id))
   );
-create policy "comments:member_update" on comments
+create policy "comments:owner_update" on comments
   for update using (
-    exists (select 1 from tasks t where t.id = comments.task_id and public.is_project_member(t.project_id))
+    exists (select 1 from tasks t where t.id = comments.task_id and public.is_project_owner(t.project_id))
   );
-create policy "comments:member_delete" on comments
+create policy "comments:owner_delete" on comments
   for delete using (
-    exists (select 1 from tasks t where t.id = comments.task_id and public.is_project_member(t.project_id))
+    exists (select 1 from tasks t where t.id = comments.task_id and public.is_project_owner(t.project_id))
   );
 
 alter table attachments enable row level security;
+drop policy if exists "attachments:member_select" on attachments;
+drop policy if exists "attachments:member_write" on attachments;
+drop policy if exists "attachments:owner_delete" on attachments;
 create policy "attachments:member_select" on attachments
   for select using (
     exists (select 1 from tasks t where t.id = attachments.task_id and public.is_project_member(t.project_id))
@@ -417,18 +478,23 @@ create policy "attachments:member_write" on attachments
   for insert with check (
     exists (select 1 from tasks t where t.id = attachments.task_id and public.is_project_member(t.project_id))
   );
-create policy "attachments:member_delete" on attachments
+create policy "attachments:owner_delete" on attachments
   for delete using (
-    exists (select 1 from tasks t where t.id = attachments.task_id and public.is_project_member(t.project_id))
+    exists (select 1 from tasks t where t.id = attachments.task_id and public.is_project_owner(t.project_id))
   );
 
 alter table activities enable row level security;
+drop policy if exists "activities:member_select" on activities;
+drop policy if exists "activities:member_write" on activities;
 create policy "activities:member_select" on activities
   for select using (public.is_project_member(project_id));
 create policy "activities:member_write" on activities
   for insert with check (public.is_project_member(project_id));
 
 alter table invites enable row level security;
+drop policy if exists "invites:invitee_select" on invites;
+drop policy if exists "invites:owner_select" on invites;
+drop policy if exists "invites:invitee_update" on invites;
 create policy "invites:invitee_select" on invites
   for select using (lower(email) = lower(auth.email()));
 create policy "invites:owner_select" on invites

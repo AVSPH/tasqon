@@ -298,13 +298,32 @@ export async function fetchActivities(projectId: string) {
 export async function fetchInvites(email: string) {
   const { data, error } = await supabase
     .from("invites")
-    .select("*, project:projects(id, name, emoji, color)")
+    .select("*")
     .eq("email", email)
     .order("created_at", { ascending: false });
 
   if (error) throw error;
 
-  return (data || []).map((row: any) => ({
+  const projectIds = (data || [])
+    .map((row: any) => row.project_id)
+    .filter(Boolean);
+
+  const { data: projects, error: projectsError } = projectIds.length
+    ? await supabase
+        .from("projects")
+        .select("id, name, emoji, color")
+        .in("id", projectIds)
+    : { data: [], error: null };
+
+  if (projectsError) throw projectsError;
+
+  const projectById = new Map(
+    (projects || []).map((project: any) => [project.id, project]),
+  );
+
+  return (data || []).map((row: any) => {
+    const project = projectById.get(row.project_id);
+    return {
     id: row.id,
     projectId: row.project_id,
     email: row.email,
@@ -312,10 +331,11 @@ export async function fetchInvites(email: string) {
     role: row.role,
     status: row.status,
     createdAt: row.created_at,
-    projectName: row.project?.name,
-    projectEmoji: row.project?.emoji,
-    projectColor: row.project?.color,
-  })) as Invite[];
+    projectName: project?.name,
+    projectEmoji: project?.emoji,
+    projectColor: project?.color,
+    };
+  }) as Invite[];
 }
 
 export async function acceptInvite({
@@ -329,7 +349,13 @@ export async function acceptInvite({
 }) {
   const { error: memberError } = await supabase
     .from("project_members")
-    .insert({ project_id: projectId, user_id: userId, role: "member" });
+    .upsert(
+      { project_id: projectId, user_id: userId, role: "member" },
+      {
+        onConflict: "project_id,user_id",
+        ignoreDuplicates: true,
+      },
+    );
 
   if (memberError) throw memberError;
 

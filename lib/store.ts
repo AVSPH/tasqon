@@ -246,6 +246,7 @@ export const useAppStore = create<AppState>()(
       },
 
       updateTask: async (taskId, updates, actor) => {
+        if (get().currentMemberRole !== "owner") return;
         const projectId = get().activeProjectId;
         const taskBefore = get().tasks.find((t) => t.id === taskId);
         await updateTaskApi(taskId, updates);
@@ -288,6 +289,7 @@ export const useAppStore = create<AppState>()(
       },
 
       moveTask: async (taskId, newStatus, actor) => {
+        if (get().currentMemberRole !== "owner") return;
         const state = get();
         const taskBefore = state.tasks.find((t) => t.id === taskId);
         const tasksInColumn = state.tasks.filter((t) => t.status === newStatus);
@@ -335,6 +337,7 @@ export const useAppStore = create<AppState>()(
       },
 
       addTask: async (task, actor) => {
+        if (get().currentMemberRole !== "owner") return;
         const state = get();
         if (!state.activeProjectId) return;
         const tasksInColumn = state.tasks.filter((t) => t.status === task.status);
@@ -359,6 +362,7 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteTask: async (taskId, actor) => {
+        if (get().currentMemberRole !== "owner") return;
         const state = get();
         const taskBefore = state.tasks.find((t) => t.id === taskId);
         await deleteTaskApi(taskId);
@@ -485,6 +489,7 @@ export const useAppStore = create<AppState>()(
       setFilterPriority: (p) => set({ filterPriority: p }),
 
       reorderTasks: async (activeId, overId, newStatus) => {
+        if (get().currentMemberRole !== "owner") return;
         let nextOrder = 0;
         set((s) => {
           const tasks = [...s.tasks];

@@ -83,11 +83,13 @@ export function Board() {
     filteredTasks.filter((t) => t.status === status).sort((a, b) => a.order - b.order);
 
   const handleDragStart = (event: DragStartEvent) => {
+    if (currentMemberRole !== "owner") return;
     const task = tasks.find((t) => t.id === event.active.id);
     if (task) setActiveTask(task);
   };
 
   const handleDragOver = (event: DragOverEvent) => {
+    if (currentMemberRole !== "owner") return;
     const { active, over } = event;
     if (!over) return;
 
@@ -112,6 +114,7 @@ export function Board() {
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
+    if (currentMemberRole !== "owner") return;
     setActiveTask(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;

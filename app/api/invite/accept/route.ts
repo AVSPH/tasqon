@@ -48,7 +48,10 @@ export async function POST() {
 
   const { error: memberError } = await supabase
     .from("project_members")
-    .upsert(membershipRows, { onConflict: "project_id,user_id" });
+    .upsert(membershipRows, {
+      onConflict: "project_id,user_id",
+      ignoreDuplicates: true,
+    });
 
   if (memberError) {
     return NextResponse.json(
