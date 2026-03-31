@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { createClient as createServerClient } from "@/utils/supabase/server";
 
 export async function POST() {
-  const cookieStore = cookies();
-  const supabase = createServerClient(cookieStore);
+  // FIXED: Await the client and pass 0 arguments
+  const supabase = await createServerClient();
 
   const {
     data: { user },

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+// You can remove the 'cookies' import if it's no longer used elsewhere in this file
 import { createClient as createServerClient } from "@/utils/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 
@@ -22,8 +22,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const cookieStore = cookies();
-  const supabase = createServerClient(cookieStore);
+  // FIXED: Await the client and pass 0 arguments
+  const supabase = await createServerClient();
+  
   const {
     data: { user },
     error: userError,
