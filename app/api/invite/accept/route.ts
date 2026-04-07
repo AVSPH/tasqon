@@ -1,6 +1,41 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/utils/supabase/server";
 
+// Helper to derive initials from name or email
+function deriveInitials(name?: string | null, email?: string | null) {
+  const base = (name || email || "User").split("@")[0];
+  return (
+    base
+      .split(/[._\s-]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "U"
+  );
+}
+
+// Helper to ensure user profile exists
+async function ensureProfile(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> }
+) {
+  const fullName = (user.user_metadata?.full_name as string | undefined) ?? null;
+  const avatarUrl = (user.user_metadata?.avatar_url as string | undefined) ?? null;
+  const initials = deriveInitials(fullName, user.email ?? null);
+
+  const { error } = await supabase
+    .from("profiles")
+    .upsert({
+      id: user.id,
+      full_name: fullName,
+      email: user.email ?? null,
+      avatar_url: avatarUrl,
+      initials,
+    });
+
+  if (error) throw error;
+}
+
 export async function POST() {
   // FIXED: Await the client and pass 0 arguments
   const supabase = await createServerClient();
@@ -20,6 +55,14 @@ export async function POST() {
       { error: "User email missing" },
       { status: 400 },
     );
+  }
+
+  // Ensure the user's profile exists
+  try {
+    await ensureProfile(supabase, user);
+  } catch (error) {
+    console.error("Failed to ensure profile:", error);
+    // Continue anyway - the profile might already exist
   }
 
   const { data: invites, error: invitesError } = await supabase

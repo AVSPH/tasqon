@@ -185,6 +185,16 @@ export async function fetchProjectMembers(projectId: string) {
     });
 }
 
+export async function removeProjectMember(projectId: string, userId: string) {
+  const { error } = await supabase
+    .from("project_members")
+    .delete()
+    .eq("project_id", projectId)
+    .eq("user_id", userId);
+
+  if (error) throw error;
+}
+
 export async function fetchTags(projectId: string) {
   const { data, error } = await supabase
     .from("tags")

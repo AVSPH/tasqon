@@ -42,6 +42,7 @@ export async function signOut() {
 
 /**
  * Update the current user's profile.
+ * Updates both auth metadata and the profiles table to ensure consistency.
  * Note: email changes may require confirmation depending on Supabase settings.
  */
 export async function updateUserProfile({
@@ -51,11 +52,34 @@ export async function updateUserProfile({
   fullName?: string;
   email?: string;
 }) {
+  // Get current user first
+  const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
+  if (userError) throw userError;
+  if (!currentUser) throw new Error("Not authenticated");
+
+  // Update auth user
   const { data, error } = await supabase.auth.updateUser({
     email,
     data: fullName ? { full_name: fullName } : undefined,
   });
   if (error) throw error;
+
+  // Also update the profiles table to keep it in sync
+  // Build update object with only the fields that are being changed
+  const profileUpdate: Record<string, any> = {};
+  if (fullName !== undefined) profileUpdate.full_name = fullName;
+  if (email !== undefined) profileUpdate.email = email;
+
+  // Only update if there are fields to update
+  if (Object.keys(profileUpdate).length > 0) {
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update(profileUpdate)
+      .eq("id", currentUser.id);
+
+    if (profileError) throw profileError;
+  }
+
   return data;
 }
 

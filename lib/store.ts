@@ -41,6 +41,7 @@ import {
   fetchTasks,
   declineInvite as declineInviteApi,
   moveTask as moveTaskApi,
+  removeProjectMember as removeProjectMemberApi,
   setTaskAssignees,
   setTaskTags,
   toggleChecklistItem as toggleChecklistItemApi,
@@ -58,6 +59,7 @@ interface AppState {
   invites: Invite[];
   activeProjectId: string | null;
   currentMemberRole: string | null;
+  _activeRequestId: string | null;
   preferences: {
     compactMode: boolean;
     showCompleted: boolean;
@@ -89,6 +91,7 @@ interface AppState {
   loadInvites: (email: string) => Promise<void>;
   addProject: (name: string) => Promise<void>;
   deleteProject: (projectId: string, ownerId: string) => Promise<void>;
+  removeProjectMember: (projectId: string, userId: string) => Promise<void>;
   acceptInvite: (invite: Invite, userId: string) => Promise<void>;
   declineInvite: (inviteId: string) => Promise<void>;
   updatePreferences: (updates: Partial<AppState["preferences"]>) => void;
@@ -133,6 +136,7 @@ export const useAppStore = create<AppState>()(
       invites: [],
       activeProjectId: null,
       currentMemberRole: null,
+      _activeRequestId: null,
       preferences: {
         compactMode: false,
         showCompleted: true,
@@ -181,7 +185,8 @@ export const useAppStore = create<AppState>()(
       },
 
       loadProjectData: async (projectId, userId) => {
-        set({ isDataLoading: true });
+        const requestId = `${projectId}-${Date.now()}`;
+        set({ isDataLoading: true, _activeRequestId: requestId });
         try {
           const [columns, tasks, members, tags, activities] = await Promise.all(
             [
@@ -192,20 +197,45 @@ export const useAppStore = create<AppState>()(
               fetchActivities(projectId),
             ],
           );
-          const currentRole = userId
-            ? (members.find((m) => m.id === userId)?.role ?? null)
-            : null;
-          set({
-            columns,
-            tasks,
-            members,
-            tags,
-            activities,
-            activeProjectId: projectId,
-            currentMemberRole: currentRole,
+
+          // Only update state if this request is still the active one
+          // (activeProjectId should still match the projectId we fetched)
+          set((state) => {
+            const isStale = state._activeRequestId !== requestId || 
+                           state.activeProjectId !== projectId;
+            if (isStale) {
+              // Request is stale, ignore the response
+              return { isDataLoading: false };
+            }
+
+            const currentRole = userId
+              ? (members.find((m) => m.id === userId)?.role ?? null)
+              : null;
+
+            // Filter out assignees that are no longer project members
+            const memberIds = new Set(members.map((m) => m.id));
+            const filteredTasks = tasks.map((task) => ({
+              ...task,
+              assignees: task.assignees.filter((assignee) => memberIds.has(assignee.id)),
+            }));
+
+            return {
+              columns,
+              tasks: filteredTasks,
+              members,
+              tags,
+              activities,
+              currentMemberRole: currentRole,
+              isDataLoading: false,
+            };
           });
-        } finally {
-          set({ isDataLoading: false });
+        } catch (error) {
+          // Only update loading state if this is still the active request
+          set((state) => {
+            if (state._activeRequestId !== requestId) return { isDataLoading: false };
+            return { isDataLoading: false };
+          });
+          console.error("Failed to load project data:", error);
         }
       },
 
@@ -248,6 +278,12 @@ export const useAppStore = create<AppState>()(
             currentMemberRole: null,
           });
         }
+      },
+
+      removeProjectMember: async (projectId, userId) => {
+        await removeProjectMemberApi(projectId, userId);
+        // Reload full project data to update tasks and members
+        await get().loadProjectData(projectId);
       },
 
       acceptInvite: async (invite, userId) => {
@@ -293,7 +329,7 @@ export const useAppStore = create<AppState>()(
           );
         }
 
-        if (actor && projectId) {
+        if (actor && projectId && isUuid(projectId)) {
           await createActivity({
             projectId,
             actorId: actor.id,
@@ -337,7 +373,7 @@ export const useAppStore = create<AppState>()(
         const taskBefore = state.tasks.find((t) => t.id === taskId);
         const tasksInColumn = state.tasks.filter((t) => t.status === newStatus);
         await moveTaskApi(taskId, newStatus, tasksInColumn.length);
-        if (actor && state.activeProjectId) {
+        if (actor && state.activeProjectId && isUuid(state.activeProjectId)) {
           await createActivity({
             projectId: state.activeProjectId,
             actorId: actor.id,
@@ -388,7 +424,7 @@ export const useAppStore = create<AppState>()(
       addTask: async (task, actor) => {
         if (get().currentMemberRole !== "owner") return;
         const state = get();
-        if (!state.activeProjectId) return;
+        if (!state.activeProjectId || !isUuid(state.activeProjectId)) return;
         const tasksInColumn = state.tasks.filter(
           (t) => t.status === task.status,
         );
@@ -420,7 +456,7 @@ export const useAppStore = create<AppState>()(
         const state = get();
         const taskBefore = state.tasks.find((t) => t.id === taskId);
         await deleteTaskApi(taskId);
-        if (actor && state.activeProjectId) {
+        if (actor && state.activeProjectId && isUuid(state.activeProjectId)) {
           await createActivity({
             projectId: state.activeProjectId,
             actorId: actor.id,
@@ -451,7 +487,7 @@ export const useAppStore = create<AppState>()(
 
       createTag: async (label, color) => {
         const projectId = get().activeProjectId;
-        if (!projectId) return;
+        if (!projectId || !isUuid(projectId)) return;
         const newTag = await createTagApi(projectId, label, color);
         set((s) => ({
           tags: [...s.tags, newTag],
@@ -470,7 +506,7 @@ export const useAppStore = create<AppState>()(
         const taskBefore = get().tasks.find((t) => t.id === taskId);
         await addCommentApi(taskId, actor.id, text);
         const projectId = get().activeProjectId;
-        if (projectId) {
+        if (projectId && isUuid(projectId)) {
           await createActivity({
             projectId,
             actorId: actor.id,

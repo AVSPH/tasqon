@@ -21,6 +21,13 @@ import { Priority } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
 import { searchProjects, fetchUserProfile } from "@/lib/data";
 
+// UUID validation helper
+const isUuid = (value: string | null | undefined): boolean => {
+  if (!value) return false;
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return UUID_REGEX.test(value);
+};
+
 // backend
 import { useAuth } from "../auth-provider";
 import { useLogin } from "@/hooks/auth/useLogin";
@@ -93,6 +100,7 @@ export function Navbar() {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isSignUpLoading, setIsSignUpLoading] = useState(false);
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
+  const [selectedMemberMenu, setSelectedMemberMenu] = useState<string | null>(null);
   const searchQuery = useAppStore((s) => s.searchQuery);
   const filterPriority = useAppStore((s) => s.filterPriority);
   const setSearchQuery = useAppStore((s) => s.setSearchQuery);
@@ -102,6 +110,7 @@ export function Navbar() {
   const setActiveProject = useAppStore((s) => s.setActiveProject);
   const members = useAppStore((s) => s.members);
   const currentMemberRole = useAppStore((s) => s.currentMemberRole);
+  const removeProjectMember = useAppStore((s) => s.removeProjectMember);
   const preferences = useAppStore((s) => s.preferences);
   const updatePreferences = useAppStore((s) => s.updatePreferences);
   const activities = useAppStore((s) => s.activities);
@@ -187,7 +196,7 @@ export function Navbar() {
   }, [session, isLoading]);
 
   const loadProjectMembers = useCallback(async () => {
-    if (!isAuthenticated || !activeProjectId) {
+    if (!isAuthenticated || !activeProjectId || !isUuid(activeProjectId)) {
       setProjectMembers([]);
       return;
     }
@@ -244,7 +253,7 @@ export function Navbar() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated || !activeProjectId) return;
+    if (!isAuthenticated || !activeProjectId || !isUuid(activeProjectId)) return;
     const channel = supabase
       .channel(`project-members-${activeProjectId}`)
       .on(
@@ -360,8 +369,8 @@ export function Navbar() {
       toast.error("Please enter an email address");
       return;
     }
-    if (!activeProjectId) {
-      toast.error("Select a project first");
+    if (!activeProjectId || !isUuid(activeProjectId)) {
+      toast.error("Select a valid project first");
       return;
     }
 
@@ -381,6 +390,9 @@ export function Navbar() {
         throw new Error(payload?.error || "Invite failed");
       }
 
+      // Reload project members to show the invited member if they already accepted
+      void loadProjectMembers();
+
       toast.success("Invite sent");
       setInviteEmail("");
       setShowInvite(false);
@@ -390,7 +402,7 @@ export function Navbar() {
     } finally {
       setIsInviteSending(false);
     }
-  }, [activeProjectId, inviteEmail]);
+  }, [activeProjectId, inviteEmail, loadProjectMembers]);
 
   return (
     <>
@@ -551,18 +563,46 @@ export function Navbar() {
 
         {/* Members */}
         {isAuthenticated && (
-          <div className="flex items-center -space-x-2">
+          <div className="flex items-center -space-x-2 relative">
             {members.slice(0, 4).map((m) => (
-              <div
-                key={m.id}
-                title={m.name}
-                className="w-7 h-7 rounded-full ring-2 ring-white shrink-0 cursor-pointer hover:scale-110 transition-transform overflow-hidden flex items-center justify-center text-[11px] font-bold text-white"
-                style={{ backgroundColor: m.color }}
-              >
-                {m.avatar ? (
-                  <img src={m.avatar} alt={m.name} className="w-full h-full object-cover" />
-                ) : (
-                  m.initials
+              <div key={m.id} className="relative">
+                <button
+                  onClick={() => setSelectedMemberMenu(selectedMemberMenu === m.id ? null : m.id)}
+                  title={m.name}
+                  className="w-7 h-7 rounded-full ring-2 ring-white shrink-0 cursor-pointer hover:scale-110 transition-transform overflow-hidden flex items-center justify-center text-[11px] font-bold text-white"
+                  style={{ backgroundColor: m.color }}
+                >
+                  {m.avatar ? (
+                    <img src={m.avatar} alt={m.name} className="w-full h-full object-cover" />
+                  ) : (
+                    m.initials
+                  )}
+                </button>
+                
+                {/* Member Menu */}
+                {currentMemberRole === "owner" && selectedMemberMenu === m.id && (
+                  <div 
+                    className="absolute top-full right-0 mt-1 bg-white/95 rounded-lg shadow-lg border border-white/70 py-1 z-50 min-w-max"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      onClick={async () => {
+                        if (activeProjectId && isUuid(activeProjectId)) {
+                          try {
+                            await removeProjectMember(activeProjectId, m.id);
+                            setSelectedMemberMenu(null);
+                            toast.success(`${m.name} removed from project`);
+                          } catch (error) {
+                            const msg = error instanceof Error ? error.message : "Failed to remove member";
+                            toast.error(msg);
+                          }
+                        }
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 transition-colors font-medium"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
