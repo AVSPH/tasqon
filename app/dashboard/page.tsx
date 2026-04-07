@@ -25,6 +25,10 @@ import { Task } from "@/lib/types";
 export default function DashboardPage() {
   const selectedTask = useAppStore((s) => s.selectedTask);
   const setSelectedTask = useAppStore((s) => s.setSelectedTask);
+  const filterPriority = useAppStore((s) => s.filterPriority);
+  const filterArchived = useAppStore((s) => s.filterArchived);
+  const filterAssignees = useAppStore((s) => s.filterAssignees);
+  const filterTags = useAppStore((s) => s.filterTags);
   const { user } = useAuth();
 
   // Subscribe to store tasks instead of fetching locally
@@ -72,17 +76,39 @@ export default function DashboardPage() {
   // Memoize task calculations for performance
   const { myTasks, dueTodayTasks, overdueTasks, doneTasks } = useMemo(() => {
     const today = new Date().toISOString().split("T")[0];
-    const dueTodayTasks = userTasks.filter(
+    
+    // Apply filters
+    const filteredTasks = userTasks.filter((t) => {
+      // Priority filter
+      if (filterPriority && t.priority !== filterPriority) return false;
+      
+      // Archive filter
+      if (filterArchived && !t.archived) return false;
+      
+      // Assignee filter (if assignees are selected, task must have one of them)
+      if (filterAssignees.length > 0 && !t.assignees.some((a) => filterAssignees.includes(a.id))) {
+        return false;
+      }
+      
+      // Tags filter (if tags are selected, task must have at least one)
+      if (filterTags.length > 0 && !t.tags.some((tag) => filterTags.includes(tag.id))) {
+        return false;
+      }
+      
+      return true;
+    });
+    
+    const dueTodayTasks = filteredTasks.filter(
       (t) => t.dueDate === today && t.status !== "done",
     );
-    const myTasks = userTasks.filter((t) => t.status !== "done");
-    const overdueTasks = userTasks.filter(
+    const myTasks = filteredTasks.filter((t) => t.status !== "done");
+    const overdueTasks = filteredTasks.filter(
       (t) => isOverdue(t.dueDate) && t.status !== "done",
     );
-    const doneTasks = userTasks.filter((t) => t.status === "done");
+    const doneTasks = filteredTasks.filter((t) => t.status === "done");
 
     return { myTasks, dueTodayTasks, overdueTasks, doneTasks };
-  }, [userTasks]);
+  }, [userTasks, filterPriority, filterArchived, filterAssignees, filterTags]);
 
   const stats = [
     {

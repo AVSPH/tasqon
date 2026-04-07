@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { Plus, MoreHorizontal, X } from "lucide-react";
+import { Plus, MoreHorizontal, X, Edit2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Task, ColumnId } from "@/lib/types";
 import { TaskCard } from "./task-card";
@@ -21,7 +21,13 @@ interface ColumnProps {
 export function Column({ id, title, color, dotColor, headerBg, tasks }: ColumnProps) {
   const [addingTask, setAddingTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [showColumnMenu, setShowColumnMenu] = useState(false);
+  const [editingColumnName, setEditingColumnName] = useState(false);
+  const [columnNameValue, setColumnNameValue] = useState(title);
+  const menuButtonRef = React.useRef<HTMLDivElement>(null);
   const addTask = useAppStore((s) => s.addTask);
+  const updateColumn = useAppStore((s) => s.updateColumn);
+  const deleteColumn = useAppStore((s) => s.deleteColumn);
   const members = useAppStore((s) => s.members);
   const currentMemberRole = useAppStore((s) => s.currentMemberRole);
   const { user } = useAuth();
@@ -77,23 +83,105 @@ export function Column({ id, title, color, dotColor, headerBg, tasks }: ColumnPr
     setAddingTask(false);
   };
 
+  const handleUpdateColumnName = async () => {
+    if (!columnNameValue.trim() || columnNameValue === title) {
+      setEditingColumnName(false);
+      setColumnNameValue(title);
+      return;
+    }
+    await updateColumn(id, { title: columnNameValue.trim() });
+    setEditingColumnName(false);
+  };
+
+  const handleOpenColumnMenu = () => {
+    setShowColumnMenu(!showColumnMenu);
+  };
+
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuButtonRef.current && !menuButtonRef.current.contains(e.target as Node)) {
+        setShowColumnMenu(false);
+      }
+    };
+    
+    if (showColumnMenu) {
+      document.addEventListener("click", handleClickOutside);
+      return () => document.removeEventListener("click", handleClickOutside);
+    }
+  }, [showColumnMenu]);
+
   return (
     <div className="flex flex-col w-72 shrink-0 h-full">
       {/* Column header */}
       <div className={cn(
-        "flex items-center gap-2.5 px-3.5 py-3 rounded-t-2xl border border-b-0 border-white/70 shadow-card backdrop-blur-xl",
+        "flex items-center gap-2.5 px-3.5 py-3 rounded-t-2xl border border-b-0 border-white/70 shadow-card backdrop-blur-xl relative",
         headerBg
       )}>
         <span className={cn("w-2 h-2 rounded-full", dotColor)} />
-        <span className={cn("flex-1 text-sm font-semibold font-display", color)}>
-          {title}
-        </span>
+        {editingColumnName && canEditTask ? (
+          <input
+            autoFocus
+            value={columnNameValue}
+            onChange={(e) => setColumnNameValue(e.target.value)}
+            onBlur={handleUpdateColumnName}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleUpdateColumnName();
+              if (e.key === "Escape") {
+                setEditingColumnName(false);
+                setColumnNameValue(title);
+              }
+            }}
+            className="flex-1 text-sm font-semibold font-display bg-transparent focus:outline-none border-b-2 border-brand-400 pb-0.5"
+          />
+        ) : (
+          <span className={cn("flex-1 text-sm font-semibold font-display", color)}>
+            {title}
+          </span>
+        )}
         <span className="min-w-[22px] h-[22px] rounded-full bg-white/80 border border-white flex items-center justify-center text-xs font-bold text-slate-500 shadow-sm px-1">
           {tasks.length}
         </span>
-        <button className="w-6 h-6 rounded-md hover:bg-white/70 flex items-center justify-center transition-colors">
-          <MoreHorizontal className="w-3.5 h-3.5 text-slate-400" />
-        </button>
+        {canEditTask && (
+          <div ref={menuButtonRef} className="relative">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenColumnMenu();
+              }}
+              className="w-6 h-6 rounded-md hover:bg-white/70 flex items-center justify-center transition-colors"
+            >
+              <MoreHorizontal className="w-3.5 h-3.5 text-slate-400" />
+            </button>
+            {showColumnMenu && (
+              <div
+                className="absolute top-8 right-0 z-[9999] bg-white rounded-lg shadow-lg border border-slate-200 min-w-[150px]"
+                onMouseLeave={() => setShowColumnMenu(false)}
+              >
+                <button
+                  onClick={() => {
+                    setEditingColumnName(true);
+                    setShowColumnMenu(false);
+                  }}
+                  className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors first:rounded-t-lg"
+                >
+                  <Edit2 className="w-4 h-4 text-slate-500" />
+                  Rename
+                </button>
+                <div className="h-px bg-slate-200" />
+                <button
+                  onClick={() => {
+                    void deleteColumn(id);
+                    setShowColumnMenu(false);
+                  }}
+                  className="w-full text-left flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors last:rounded-b-lg"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Tasks */}

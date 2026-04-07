@@ -52,6 +52,7 @@ export interface Task {
   attachments: Attachment[];
   tags: Tag[];
   coverColor?: string;
+  archived?: boolean;
   order: number;
 }
 

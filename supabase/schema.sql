@@ -100,6 +100,7 @@ create table if not exists tasks (
   due_date date,
   order_index integer not null default 0,
   cover_color text,
+  archived boolean default false,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -325,6 +326,7 @@ drop policy if exists "members:project_select" on project_members;
 drop policy if exists "members:owner_insert" on project_members;
 drop policy if exists "members:invite_accept" on project_members;
 drop policy if exists "members:owner_delete" on project_members;
+drop policy if exists "members:owner_update" on project_members;
 create policy "members:project_select" on project_members
   for select using (public.is_project_member(project_id));
 create policy "members:owner_insert" on project_members
@@ -339,6 +341,20 @@ create policy "members:invite_accept" on project_members
   for insert with check (public.can_accept_invite(project_id) and user_id = auth.uid());
 create policy "members:owner_delete" on project_members
   for delete using (
+    exists (
+      select 1 from projects p
+      where p.id = project_members.project_id
+        and p.owner_id = auth.uid()
+    )
+  );
+create policy "members:owner_update" on project_members
+  for update using (
+    exists (
+      select 1 from projects p
+      where p.id = project_members.project_id
+        and p.owner_id = auth.uid()
+    )
+  ) with check (
     exists (
       select 1 from projects p
       where p.id = project_members.project_id

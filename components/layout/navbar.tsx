@@ -14,12 +14,14 @@ import {
   Moon,
   Sun,
   Palette,
+  Archive,
+  Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/lib/store";
 import { Priority } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
-import { searchProjects, fetchUserProfile } from "@/lib/data";
+import { searchProjects, fetchUserProfile, updateMemberRole, removeProjectMember } from "@/lib/data";
 
 // UUID validation helper
 const isUuid = (value: string | null | undefined): boolean => {
@@ -52,6 +54,12 @@ const THEME_OPTIONS = [
   { label: "Midnight", value: "dark", icon: "🌙" },
 ];
 
+const ROLE_OPTIONS = [
+  { label: "Owner", value: "owner", description: "Full control" },
+  { label: "Member", value: "member", description: "Can edit tasks" },
+  { label: "Viewer", value: "viewer", description: "View only" },
+];
+
 const DEFAULT_MEMBER_COLOR = "#14b8a6";
 
 type ProjectMember = {
@@ -60,6 +68,7 @@ type ProjectMember = {
   initials: string;
   color: string;
   avatarUrl: string | null;
+  role: string;
 };
 
 type ProfileRow = {
@@ -71,6 +80,7 @@ type ProfileRow = {
 
 type ProjectMemberRow = {
   user_id: string;
+  role: string;
   profiles: ProfileRow | ProfileRow[] | null;
 };
 
@@ -103,19 +113,26 @@ export function Navbar() {
   const [selectedMemberMenu, setSelectedMemberMenu] = useState<string | null>(null);
   const searchQuery = useAppStore((s) => s.searchQuery);
   const filterPriority = useAppStore((s) => s.filterPriority);
+  const filterArchived = useAppStore((s) => s.filterArchived);
+  const filterAssignees = useAppStore((s) => s.filterAssignees);
+  const filterTags = useAppStore((s) => s.filterTags);
+  const tasks = useAppStore((s) => s.tasks);
   const setSearchQuery = useAppStore((s) => s.setSearchQuery);
   const setFilterPriority = useAppStore((s) => s.setFilterPriority);
+  const setFilterArchived = useAppStore((s) => s.setFilterArchived);
+  const setFilterAssignees = useAppStore((s) => s.setFilterAssignees);
+  const setFilterTags = useAppStore((s) => s.setFilterTags);
   const projects = useAppStore((s) => s.projects);
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   const setActiveProject = useAppStore((s) => s.setActiveProject);
   const members = useAppStore((s) => s.members);
   const currentMemberRole = useAppStore((s) => s.currentMemberRole);
+  const loadProjectData = useAppStore((s) => s.loadProjectData);
   const removeProjectMember = useAppStore((s) => s.removeProjectMember);
   const preferences = useAppStore((s) => s.preferences);
   const updatePreferences = useAppStore((s) => s.updatePreferences);
   const activities = useAppStore((s) => s.activities);
   const activeProject = projects.find((p) => p.id === activeProjectId);
-  
   // Get recent activities (last 5)
   const recentActivities = useMemo(() => {
     return activities.slice(0, 5);
@@ -167,6 +184,36 @@ export function Navbar() {
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase() ?? "")
       .join("") || "TU";
+
+  // Compute available assignees and tags from tasks
+  const { availableAssignees, availableTags } = useMemo(() => {
+    const assigneeMap = new Map<string, { id: string; name: string; initials: string; color: string; avatarUrl: string | null }>();
+    const tagMap = new Map<string, { id: string; label: string; color: string }>();
+
+    tasks.forEach((task) => {
+      task.assignees.forEach((assignee) => {
+        if (!assigneeMap.has(assignee.id)) {
+          assigneeMap.set(assignee.id, {
+            id: assignee.id,
+            name: assignee.name,
+            initials: assignee.initials,
+            color: assignee.color,
+            avatarUrl: assignee.avatar || null,
+          });
+        }
+      });
+      task.tags.forEach((tag) => {
+        if (!tagMap.has(tag.id)) {
+          tagMap.set(tag.id, tag);
+        }
+      });
+    });
+
+    return {
+      availableAssignees: Array.from(assigneeMap.values()),
+      availableTags: Array.from(tagMap.values()),
+    };
+  }, [tasks]);
 
   // Fetch user avatar
   const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
@@ -231,6 +278,7 @@ export function Navbar() {
         initials,
         color: profile?.color ?? DEFAULT_MEMBER_COLOR,
         avatarUrl: profile?.avatar_url ?? null,
+        role: row.role ?? "member",
       };
     });
 
@@ -240,6 +288,57 @@ export function Navbar() {
   useEffect(() => {
     void loadProjectMembers();
   }, [loadProjectMembers]);
+
+  // Subscribe to real-time member role changes
+  useEffect(() => {
+    if (!isAuthenticated || !activeProjectId || !isUuid(activeProjectId)) return;
+
+    const channel = supabase
+      .channel(`project-members-${activeProjectId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "project_members",
+          filter: `project_id=eq.${activeProjectId}`,
+        },
+        () => {
+          void loadProjectMembers();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [activeProjectId, isAuthenticated, loadProjectMembers]);
+
+  // Subscribe to current user's role changes
+  useEffect(() => {
+    if (!isAuthenticated || !activeProjectId || !isUuid(activeProjectId) || !session?.user?.id) return;
+
+    const channel = supabase
+      .channel(`user-role-${session.user.id}-${activeProjectId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "project_members",
+          filter: `project_id=eq.${activeProjectId} AND user_id=eq.${session.user.id}`,
+        },
+        () => {
+          // Reload project data to update currentMemberRole
+          void loadProjectData(activeProjectId, session.user.id);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [activeProjectId, isAuthenticated, session?.user?.id, loadProjectData]);
 
   // Close search results when pressing Escape
   useEffect(() => {
@@ -487,39 +586,128 @@ export function Navbar() {
             onClick={() => setShowFilter(!showFilter)}
             className={cn(
               "flex items-center gap-1.5 h-8 px-3 rounded-lg text-sm font-medium border transition-all",
-              filterPriority
+              filterPriority || filterArchived || filterAssignees.length > 0 || filterTags.length > 0
                 ? "bg-brand-50/80 border-brand-200 text-brand-700 theme-dark:bg-brand-900/50 theme-dark:border-brand-800/80 theme-dark:text-brand-300"
                 : "bg-white/70 theme-dark:bg-slate-800/70 border-white/70 theme-dark:border-slate-700/70 text-slate-600 theme-dark:text-slate-300 hover:bg-white/90 theme-dark:hover:bg-slate-700/90",
             )}
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
             Filter
-            {filterPriority && (
+            {(filterPriority || filterArchived || filterAssignees.length > 0 || filterTags.length > 0) && (
               <span className="ml-0.5 w-1.5 h-1.5 rounded-full bg-brand-500" />
             )}
           </button>
 
           {showFilter && (
-            <div className="absolute top-10 left-0 z-50 bg-white/90 theme-dark:bg-slate-800/90 backdrop-blur-xl rounded-xl shadow-modal border border-white/70 theme-dark:border-slate-700/70 p-2 min-w-[160px] animate-scale-in">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 theme-dark:text-slate-500 px-2 py-1.5">
-                Priority
-              </p>
-              {PRIORITY_FILTERS.map((f) => (
+            <div className="absolute top-10 left-0 z-50 bg-white/90 theme-dark:bg-slate-800/90 backdrop-blur-xl rounded-xl shadow-modal border border-white/70 theme-dark:border-slate-700/70 p-3 min-w-[280px] max-h-[500px] overflow-y-auto animate-scale-in">
+              {/* Priority Section */}
+              <div className="mb-3">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 theme-dark:text-slate-500 px-1 py-1.5 mb-1">
+                  Priority
+                </p>
+                {PRIORITY_FILTERS.map((f) => (
+                  <button
+                    key={f.label}
+                    onClick={() => {
+                      setFilterPriority(f.value);
+                    }}
+                    className="flex items-center gap-2.5 w-full px-2 py-1.5 rounded-lg hover:bg-white/70 theme-dark:hover:bg-slate-700/70 text-sm text-slate-700 theme-dark:text-slate-200 transition-colors"
+                  >
+                    <span className={cn("w-2 h-2 rounded-full", f.color)} />
+                    {f.label}
+                    {filterPriority === f.value && (
+                      <Check className="w-3.5 h-3.5 text-brand-500 ml-auto" />
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              <div className="border-t border-white/50 theme-dark:border-slate-700/50 my-2" />
+
+              {/* Archive Section */}
+              <div className="mb-3">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 theme-dark:text-slate-500 px-1 py-1.5 mb-1">
+                  Status
+                </p>
                 <button
-                  key={f.label}
-                  onClick={() => {
-                    setFilterPriority(f.value);
-                    setShowFilter(false);
-                  }}
+                  onClick={() => setFilterArchived(!filterArchived)}
                   className="flex items-center gap-2.5 w-full px-2 py-1.5 rounded-lg hover:bg-white/70 theme-dark:hover:bg-slate-700/70 text-sm text-slate-700 theme-dark:text-slate-200 transition-colors"
                 >
-                  <span className={cn("w-2 h-2 rounded-full", f.color)} />
-                  {f.label}
-                  {filterPriority === f.value && (
+                  <Archive className="w-3.5 h-3.5" />
+                  Show Archived
+                  {filterArchived && (
                     <Check className="w-3.5 h-3.5 text-brand-500 ml-auto" />
                   )}
                 </button>
-              ))}
+              </div>
+
+              {availableAssignees.length > 0 && (
+                <>
+                  <div className="border-t border-white/50 theme-dark:border-slate-700/50 my-2" />
+                  {/* Assignee Section */}
+                  <div className="mb-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 theme-dark:text-slate-500 px-1 py-1.5 mb-1">
+                      Assignees
+                    </p>
+                    {availableAssignees.map((assignee) => (
+                      <button
+                        key={assignee.id}
+                        onClick={() => {
+                          if (filterAssignees.includes(assignee.id)) {
+                            setFilterAssignees(filterAssignees.filter((id) => id !== assignee.id));
+                          } else {
+                            setFilterAssignees([...filterAssignees, assignee.id]);
+                          }
+                        }}
+                        className="flex items-center gap-2.5 w-full px-2 py-1.5 rounded-lg hover:bg-white/70 theme-dark:hover:bg-slate-700/70 text-sm text-slate-700 theme-dark:text-slate-200 transition-colors"
+                      >
+                        <span
+                          className="w-3.5 h-3.5 rounded-full"
+                          style={{ backgroundColor: assignee.color }}
+                        />
+                        {assignee.name}
+                        {filterAssignees.includes(assignee.id) && (
+                          <Check className="w-3.5 h-3.5 text-brand-500 ml-auto" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {availableTags.length > 0 && (
+                <>
+                  <div className="border-t border-white/50 theme-dark:border-slate-700/50 my-2" />
+                  {/* Tags Section */}
+                  <div className="mb-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 theme-dark:text-slate-500 px-1 py-1.5 mb-1">
+                      Tags
+                    </p>
+                    {availableTags.map((tag) => (
+                      <button
+                        key={tag.id}
+                        onClick={() => {
+                          if (filterTags.includes(tag.id)) {
+                            setFilterTags(filterTags.filter((id) => id !== tag.id));
+                          } else {
+                            setFilterTags([...filterTags, tag.id]);
+                          }
+                        }}
+                        className="flex items-center gap-2.5 w-full px-2 py-1.5 rounded-lg hover:bg-white/70 theme-dark:hover:bg-slate-700/70 text-sm text-slate-700 theme-dark:text-slate-200 transition-colors"
+                      >
+                        <span
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: tag.color }}
+                        />
+                        {tag.label}
+                        {filterTags.includes(tag.id) && (
+                          <Check className="w-3.5 h-3.5 text-brand-500 ml-auto" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -582,9 +770,43 @@ export function Navbar() {
                 {/* Member Menu */}
                 {currentMemberRole === "owner" && selectedMemberMenu === m.id && (
                   <div 
-                    className="absolute top-full right-0 mt-1 bg-white/95 rounded-lg shadow-lg border border-white/70 py-1 z-50 min-w-max"
+                    className="absolute top-full right-0 mt-1 bg-white/95 theme-dark:bg-slate-800/95 rounded-lg shadow-lg border border-white/70 theme-dark:border-slate-700/70 py-1 z-50 min-w-max"
                     onClick={(e) => e.stopPropagation()}
                   >
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 theme-dark:text-slate-500 px-3 py-1.5">
+                      Role
+                    </p>
+                    {ROLE_OPTIONS.map((role) => (
+                      <button
+                        key={role.value}
+                        onClick={async () => {
+                          if (activeProjectId && isUuid(activeProjectId) && session?.user?.id) {
+                            try {
+                              await updateMemberRole(activeProjectId, m.id, role.value);
+                              // Reload full project data to update members and permissions
+                              await loadProjectData(activeProjectId, session.user.id);
+                              setSelectedMemberMenu(null);
+                              toast.success(`${m.name} role updated to ${role.label}`);
+                            } catch (error) {
+                              const msg = error instanceof Error ? error.message : "Failed to update role";
+                              toast.error(msg);
+                            }
+                          }
+                        }}
+                        className={cn(
+                          "w-full text-left px-3 py-2 text-xs transition-colors",
+                          m.role && m.role.toLowerCase() === role.value.toLowerCase()
+                            ? "bg-brand-50 theme-dark:bg-brand-900/50 text-brand-700 theme-dark:text-brand-300 font-medium"
+                            : "text-slate-700 theme-dark:text-slate-200 hover:bg-white/50 theme-dark:hover:bg-slate-700/50"
+                        )}
+                      >
+                        <div>{role.label}</div>
+                        <div className="text-[10px] text-slate-400 theme-dark:text-slate-500">{role.description}</div>
+                      </button>
+                    ))}
+                    
+                    <div className="border-t border-white/50 theme-dark:border-slate-700/50 my-1" />
+                    
                     <button
                       onClick={async () => {
                         if (activeProjectId && isUuid(activeProjectId)) {
@@ -598,7 +820,7 @@ export function Navbar() {
                           }
                         }
                       }}
-                      className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 transition-colors font-medium"
+                      className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 theme-dark:hover:bg-red-500/10 transition-colors font-medium"
                     >
                       Remove
                     </button>

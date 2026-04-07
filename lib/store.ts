@@ -7,6 +7,7 @@ import type {
   Comment,
   Invite,
   Member,
+  Priority,
   Project,
   Tag,
   Task,
@@ -68,10 +69,14 @@ interface AppState {
     theme: "mist" | "linen" | "dark";
   };
   selectedTask: Task | null;
+  selectedTaskIds: string[];
   sidebarCollapsed: boolean;
   activeView: "board" | "dashboard";
   searchQuery: string;
   filterPriority: string | null;
+  filterArchived: boolean;
+  filterAssignees: string[];
+  filterTags: string[];
   isDataLoading: boolean;
 
   // Actions
@@ -106,8 +111,13 @@ interface AppState {
     actor?: Member,
   ) => Promise<void>;
   addColumn: (title: string, projectId: string) => Promise<void>;
+  updateColumn: (columnId: string, updates: Partial<Column>) => Promise<void>;
+  deleteColumn: (columnId: string) => Promise<void>;
   addTask: (task: Omit<Task, "id" | "order">, actor?: Member) => Promise<void>;
   deleteTask: (taskId: string, actor?: Member) => Promise<void>;
+  archiveTask: (taskId: string, actor?: Member) => Promise<void>;
+  unarchiveTask: (taskId: string, actor?: Member) => Promise<void>;
+  duplicateTask: (taskId: string, actor?: Member) => Promise<void>;
   createTag: (label: string, color: string) => Promise<void>;
   deleteTag: (tagId: string) => Promise<void>;
   addComment: (taskId: string, text: string, actor?: Member) => Promise<void>;
@@ -117,11 +127,24 @@ interface AppState {
   setActiveView: (view: "board" | "dashboard") => void;
   setSearchQuery: (q: string) => void;
   setFilterPriority: (p: string | null) => void;
+  setFilterArchived: (show: boolean) => void;
+  setFilterAssignees: (assigneeIds: string[]) => void;
+  setFilterTags: (tagIds: string[]) => void;
+  resetFilters: () => void;
   reorderTasks: (
     activeId: string,
     overId: string,
     newStatus: TaskStatus,
   ) => Promise<void>;
+  toggleSelectTask: (taskId: string) => void;
+  selectAllTasks: () => void;
+  clearSelection: () => void;
+  bulkArchive: (taskIds: string[], actor?: Member) => Promise<void>;
+  bulkUnarchive: (taskIds: string[], actor?: Member) => Promise<void>;
+  bulkUpdatePriority: (taskIds: string[], priority: Priority, actor?: Member) => Promise<void>;
+  bulkAssignTo: (taskIds: string[], assigneeIds: string[], actor?: Member) => Promise<void>;
+  bulkAddTags: (taskIds: string[], tagIds: string[], actor?: Member) => Promise<void>;
+  bulkMoveToColumn: (taskIds: string[], columnId: string, actor?: Member) => Promise<void>;
 }
 
 export const useAppStore = create<AppState>()(
@@ -145,10 +168,14 @@ export const useAppStore = create<AppState>()(
         theme: "mist",
       },
       selectedTask: null,
+      selectedTaskIds: [],
       sidebarCollapsed: false,
       activeView: "board",
       searchQuery: "",
       filterPriority: null,
+      filterArchived: false,
+      filterAssignees: [],
+      filterTags: [],
       isDataLoading: false,
 
       setSelectedTask: (task) => set({ selectedTask: task }),
@@ -421,6 +448,32 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ columns: [...s.columns, newColumn] }));
       },
 
+      updateColumn: async (columnId, updates) => {
+        if (get().currentMemberRole !== "owner") return;
+        await updateTaskApi(columnId, updates as any);
+        set((s) => ({
+          columns: s.columns.map((c) =>
+            c.id === columnId ? { ...c, ...updates } : c,
+          ),
+        }));
+      },
+
+      deleteColumn: async (columnId) => {
+        if (get().currentMemberRole !== "owner") return;
+        const state = get();
+        const tasksInColumn = state.tasks.filter((t) => t.status === columnId);
+        
+        // Delete all tasks in this column
+        for (const task of tasksInColumn) {
+          await deleteTaskApi(task.id);
+        }
+        
+        set((s) => ({
+          columns: s.columns.filter((c) => c.id !== columnId),
+          tasks: s.tasks.filter((t) => t.status !== columnId),
+        }));
+      },
+
       addTask: async (task, actor) => {
         if (get().currentMemberRole !== "owner") return;
         const state = get();
@@ -483,6 +536,140 @@ export const useAppStore = create<AppState>()(
             selectedTask: s.selectedTask?.id === taskId ? null : s.selectedTask,
           };
         });
+      },
+
+      archiveTask: async (taskId, actor) => {
+        const role = get().currentMemberRole;
+        if (role !== "owner" && role !== "member") return;
+        const state = get();
+        const taskBefore = state.tasks.find((t) => t.id === taskId);
+        
+        await updateTaskApi(taskId, { archived: true });
+        
+        if (actor && state.activeProjectId && isUuid(state.activeProjectId)) {
+          await createActivity({
+            projectId: state.activeProjectId,
+            actorId: actor.id,
+            action: "archived",
+            target: taskBefore?.title ?? "Task",
+          });
+        }
+        
+        set((s) => {
+          const tasks = s.tasks.map((t) =>
+            t.id === taskId ? { ...t, archived: true } : t,
+          );
+          const activity =
+            taskBefore && actor
+              ? {
+                  id: `act-${Date.now()}`,
+                  user: actor,
+                  action: "archived",
+                  target: taskBefore.title,
+                  createdAt: new Date().toISOString(),
+                }
+              : null;
+          return {
+            tasks,
+            activities: activity ? [activity, ...s.activities] : s.activities,
+            selectedTask:
+              s.selectedTask?.id === taskId
+                ? { ...s.selectedTask, archived: true }
+                : s.selectedTask,
+          };
+        });
+      },
+
+      unarchiveTask: async (taskId, actor) => {
+        const role = get().currentMemberRole;
+        if (role !== "owner" && role !== "member") return;
+        const state = get();
+        const taskBefore = state.tasks.find((t) => t.id === taskId);
+        
+        await updateTaskApi(taskId, { archived: false });
+        
+        if (actor && state.activeProjectId && isUuid(state.activeProjectId)) {
+          await createActivity({
+            projectId: state.activeProjectId,
+            actorId: actor.id,
+            action: "unarchived",
+            target: taskBefore?.title ?? "Task",
+          });
+        }
+        
+        set((s) => {
+          const tasks = s.tasks.map((t) =>
+            t.id === taskId ? { ...t, archived: false } : t,
+          );
+          const activity =
+            taskBefore && actor
+              ? {
+                  id: `act-${Date.now()}`,
+                  user: actor,
+                  action: "unarchived",
+                  target: taskBefore.title,
+                  createdAt: new Date().toISOString(),
+                }
+              : null;
+          return {
+            tasks,
+            activities: activity ? [activity, ...s.activities] : s.activities,
+            selectedTask:
+              s.selectedTask?.id === taskId
+                ? { ...s.selectedTask, archived: false }
+                : s.selectedTask,
+          };
+        });
+      },
+
+      duplicateTask: async (taskId, actor) => {
+        const role = get().currentMemberRole;
+        if (role !== "owner" && role !== "member") return;
+        const state = get();
+        const taskToDuplicate = state.tasks.find((t) => t.id === taskId);
+        if (!taskToDuplicate || !state.activeProjectId || !isUuid(state.activeProjectId)) return;
+        
+        const newTask: Omit<Task, "id" | "order"> = {
+          title: `${taskToDuplicate.title} (copy)`,
+          description: taskToDuplicate.description,
+          status: taskToDuplicate.status,
+          priority: taskToDuplicate.priority,
+          assignees: taskToDuplicate.assignees,
+          dueDate: taskToDuplicate.dueDate,
+          checklist: [],
+          comments: [],
+          attachments: [],
+          tags: taskToDuplicate.tags,
+          coverColor: taskToDuplicate.coverColor,
+        };
+        
+        const tasksInColumn = state.tasks.filter(
+          (t) => t.status === taskToDuplicate.status,
+        );
+        
+        await createTaskApi({
+          projectId: state.activeProjectId,
+          columnId: taskToDuplicate.status,
+          title: newTask.title,
+          priority: newTask.priority,
+          assigneeIds: newTask.assignees.map((a) => a.id),
+          order: tasksInColumn.length,
+        });
+        
+        if (actor && isUuid(state.activeProjectId)) {
+          await createActivity({
+            projectId: state.activeProjectId,
+            actorId: actor.id,
+            action: "duplicated",
+            target: taskToDuplicate.title,
+          });
+        }
+        
+        const { data: userData } = await supabase.auth.getUser();
+        await state.loadProjectData(
+          state.activeProjectId,
+          userData?.user?.id ?? undefined,
+        );
       },
 
       createTag: async (label, color) => {
@@ -610,6 +797,16 @@ export const useAppStore = create<AppState>()(
       setActiveView: (view) => set({ activeView: view }),
       setSearchQuery: (q) => set({ searchQuery: q }),
       setFilterPriority: (p) => set({ filterPriority: p }),
+      setFilterArchived: (show) => set({ filterArchived: show }),
+      setFilterAssignees: (assigneeIds) => set({ filterAssignees: assigneeIds }),
+      setFilterTags: (tagIds) => set({ filterTags: tagIds }),
+      resetFilters: () => set({
+        filterPriority: null,
+        filterArchived: false,
+        filterAssignees: [],
+        filterTags: [],
+        searchQuery: "",
+      }),
 
       reorderTasks: async (activeId, overId, newStatus) => {
         if (get().currentMemberRole !== "owner") return;
@@ -642,6 +839,150 @@ export const useAppStore = create<AppState>()(
         });
 
         await moveTaskApi(activeId, newStatus, nextOrder);
+      },
+
+      // Bulk selection actions
+      toggleSelectTask: (taskId) => set((state) => {
+        const isSelected = state.selectedTaskIds.includes(taskId);
+        return {
+          selectedTaskIds: isSelected
+            ? state.selectedTaskIds.filter((id) => id !== taskId)
+            : [...state.selectedTaskIds, taskId],
+        };
+      }),
+
+      selectAllTasks: () => set((state) => ({
+        selectedTaskIds: state.tasks.map((t) => t.id),
+      })),
+
+      clearSelection: () => set({ selectedTaskIds: [] }),
+
+      // Bulk operations
+      bulkArchive: async (taskIds, actor) => {
+        const role = get().currentMemberRole;
+        if (role !== "owner" && role !== "member") return;
+
+        set((state) => ({
+          tasks: state.tasks.map((task) =>
+            taskIds.includes(task.id) ? { ...task, archived: true } : task
+          ),
+        }));
+
+        try {
+          await Promise.all(
+            taskIds.map((taskId) => updateTaskApi(taskId, { archived: true }))
+          );
+          get().clearSelection();
+        } catch {}
+      },
+
+      bulkUnarchive: async (taskIds, actor) => {
+        const role = get().currentMemberRole;
+        if (role !== "owner" && role !== "member") return;
+
+        set((state) => ({
+          tasks: state.tasks.map((task) =>
+            taskIds.includes(task.id) ? { ...task, archived: false } : task
+          ),
+        }));
+
+        try {
+          await Promise.all(
+            taskIds.map((taskId) => updateTaskApi(taskId, { archived: false }))
+          );
+          get().clearSelection();
+        } catch {}
+      },
+
+      bulkUpdatePriority: async (taskIds, priority, actor) => {
+        const role = get().currentMemberRole;
+        if (role !== "owner" && role !== "member") return;
+
+        set((state) => ({
+          tasks: state.tasks.map((task) =>
+            taskIds.includes(task.id) ? { ...task, priority } : task
+          ),
+        }));
+
+        try {
+          await Promise.all(
+            taskIds.map((taskId) => updateTaskApi(taskId, { priority }))
+          );
+          get().clearSelection();
+        } catch {}
+      },
+
+      bulkAssignTo: async (taskIds, assigneeIds, actor) => {
+        const role = get().currentMemberRole;
+        if (role !== "owner" && role !== "member") return;
+
+        const selectedMembers = get().members.filter((m) =>
+          assigneeIds.includes(m.id)
+        );
+
+        set((state) => ({
+          tasks: state.tasks.map((task) =>
+            taskIds.includes(task.id)
+              ? { ...task, assignees: selectedMembers }
+              : task
+          ),
+        }));
+
+        try {
+          await Promise.all(
+            taskIds.map((taskId) =>
+              setTaskAssignees(taskId, assigneeIds)
+            )
+          );
+          get().clearSelection();
+        } catch {}
+      },
+
+      bulkAddTags: async (taskIds, tagIds, actor) => {
+        const role = get().currentMemberRole;
+        if (role !== "owner" && role !== "member") return;
+
+        const selectedTags = get().tags.filter((t) =>
+          tagIds.includes(t.id)
+        );
+
+        set((state) => ({
+          tasks: state.tasks.map((task) =>
+            taskIds.includes(task.id)
+              ? { ...task, tags: [...task.tags, ...selectedTags] }
+              : task
+          ),
+        }));
+
+        try {
+          await Promise.all(
+            taskIds.map((taskId) => {
+              const existingTagIds = get().tasks.find((t) => t.id === taskId)?.tags.map((t) => t.id) || [];
+              return setTaskTags(taskId, [...existingTagIds, ...tagIds]);
+            })
+          );
+          get().clearSelection();
+        } catch {}
+      },
+
+      bulkMoveToColumn: async (taskIds, columnId, actor) => {
+        const role = get().currentMemberRole;
+        if (role !== "owner" && role !== "member") return;
+
+        set((state) => ({
+          tasks: state.tasks.map((task) =>
+            taskIds.includes(task.id) ? { ...task, status: columnId } : task
+          ),
+        }));
+
+        try {
+          await Promise.all(
+            taskIds.map((taskId) =>
+              moveTaskApi(taskId, columnId, 0)
+            )
+          );
+          get().clearSelection();
+        } catch {}
       },
     }),
     {

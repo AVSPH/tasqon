@@ -17,6 +17,9 @@ interface TaskCardProps {
 
 export function TaskCard({ task, overlay }: TaskCardProps) {
   const setSelectedTask = useAppStore((s) => s.setSelectedTask);
+  const selectedTaskIds = useAppStore((s) => s.selectedTaskIds);
+  const toggleSelectTask = useAppStore((s) => s.toggleSelectTask);
+  const isSelected = selectedTaskIds.includes(task.id);
 
   const {
     attributes, listeners, setNodeRef,
@@ -37,6 +40,11 @@ export function TaskCard({ task, overlay }: TaskCardProps) {
   const dueSoon = isDueSoon(task.dueDate);
   const completedChecklist = task.checklist.filter((i) => i.done).length;
 
+  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    toggleSelectTask(task.id);
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -45,7 +53,8 @@ export function TaskCard({ task, overlay }: TaskCardProps) {
         "group bg-white/85 backdrop-blur-xl rounded-2xl border border-white/70 shadow-card cursor-pointer select-none",
         "hover:shadow-card-hover hover:border-white transition-all duration-200 hover:-translate-y-0.5",
         isDragging && "opacity-40",
-        overlay && "shadow-modal rotate-2 cursor-grabbing"
+        overlay && "shadow-modal rotate-2 cursor-grabbing",
+        isSelected && "ring-2 ring-brand-500 border-brand-500"
       )}
       onClick={() => setSelectedTask(task)}
     >
@@ -75,6 +84,13 @@ export function TaskCard({ task, overlay }: TaskCardProps) {
 
         {/* Title + Drag handle */}
         <div className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={handleCheckboxChange}
+            className="mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 cursor-pointer w-4 h-4"
+            onClick={(e) => e.stopPropagation()}
+          />
           <button
             {...attributes}
             {...listeners}

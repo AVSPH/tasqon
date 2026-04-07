@@ -3,7 +3,7 @@ import React, { useMemo, useState, useRef, useEffect } from "react";
 import {
   X, Calendar, Tag as TagIcon, Users, Paperclip,
   CheckSquare, MessageSquare, Plus, Check, Trash2,
-  Edit2, ChevronDown, Flag, AlignLeft, Hash
+  Edit2, ChevronDown, Flag, AlignLeft, Hash, Copy, Archive
 } from "lucide-react";
 import { cn, PRIORITY_CONFIG, timeAgo, formatDate } from "@/lib/utils";
 import { Task, Priority, TaskStatus, Attachment } from "@/lib/types";
@@ -23,11 +23,14 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
   const toggleChecklistItem = useAppStore((s) => s.toggleChecklistItem);
   const addChecklistItem = useAppStore((s) => s.addChecklistItem);
   const deleteTask = useAppStore((s) => s.deleteTask);
+  const archiveTask = useAppStore((s) => s.archiveTask);
+  const unarchiveTask = useAppStore((s) => s.unarchiveTask);
+  const duplicateTask = useAppStore((s) => s.duplicateTask);
   const createTag = useAppStore((s) => s.createTag);
   const columns = useAppStore((s) => s.columns);
   const members = useAppStore((s) => s.members);
-  const tags = useAppStore((s) => s.tags);
   const currentMemberRole = useAppStore((s) => s.currentMemberRole);
+  const tags = useAppStore((s) => s.tags);
   const { user } = useAuth();
 
   // Allow members to edit tasks they're working on
@@ -78,6 +81,7 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [showPriorityPicker, setShowPriorityPicker] = useState(false);
   const [showTagPicker, setShowTagPicker] = useState(false);
+  const [showCoverColorPicker, setShowCoverColorPicker] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [creatingTag, setCreatingTag] = useState(false);
   const [newTagLabel, setNewTagLabel] = useState("");
@@ -289,12 +293,39 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
 
           <div className="flex items-center gap-2">
             {canEditTask && (
-              <button
-                onClick={() => { void deleteTask(task.id, actor ?? undefined); onClose(); }}
-                className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              <>
+                <button
+                  onClick={() => { void duplicateTask(task.id, actor ?? undefined); onClose(); }}
+                  className="w-8 h-8 rounded-lg hover:bg-blue-50 flex items-center justify-center text-slate-400 hover:text-blue-500 transition-colors"
+                  title="Duplicate task"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+                {task.archived ? (
+                  <button
+                    onClick={() => { void unarchiveTask(task.id, actor ?? undefined); onClose(); }}
+                    className="w-8 h-8 rounded-lg hover:bg-green-50 flex items-center justify-center text-slate-400 hover:text-green-500 transition-colors"
+                    title="Unarchive task"
+                  >
+                    <Archive className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => { void archiveTask(task.id, actor ?? undefined); onClose(); }}
+                    className="w-8 h-8 rounded-lg hover:bg-amber-50 flex items-center justify-center text-slate-400 hover:text-amber-500 transition-colors"
+                    title="Archive task"
+                  >
+                    <Archive className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  onClick={() => { void deleteTask(task.id, actor ?? undefined); onClose(); }}
+                  className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"
+                  title="Delete task"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </>
             )}
             <button
               onClick={onClose}
@@ -428,6 +459,53 @@ export function TaskModal({ task, onClose }: TaskModalProps) {
                 </div>
               </div>
             </div>
+
+            {/* Cover Color */}
+            {canEditTask && (
+              <div>
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                    <span className="w-3.5 h-3.5 rounded-full" style={{ backgroundColor: task.coverColor || '#e2e8f0' }} />
+                    Cover
+                  </div>
+                  <button
+                    onClick={() => setShowCoverColorPicker(!showCoverColorPicker)}
+                    className="text-xs px-2 py-1 rounded bg-white/70 hover:bg-white/90 transition-colors text-slate-600"
+                  >
+                    {showCoverColorPicker ? "Hide" : "Edit"}
+                  </button>
+                </div>
+                {showCoverColorPicker && (
+                  <div className="flex flex-wrap gap-2 p-2 bg-white/50 rounded-lg border border-white/70">
+                    {["#14b8a6", "#0ea5e9", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6", "#ef4444", "#6366f1", "#a855f7", "#e2e8f0"].map((color) => (
+                      <button
+                        key={color}
+                        onClick={() => {
+                          updateTaskWithActor({ coverColor: color });
+                          setShowCoverColorPicker(false);
+                        }}
+                        className="w-8 h-8 rounded-lg border-2 transition-all hover:scale-110"
+                        style={{
+                          backgroundColor: color,
+                          borderColor: task.coverColor === color ? "#1f2937" : "transparent",
+                        }}
+                        title={color}
+                      />
+                    ))}
+                    <button
+                      onClick={() => {
+                        updateTaskWithActor({ coverColor: undefined });
+                        setShowCoverColorPicker(false);
+                      }}
+                      className="w-8 h-8 rounded-lg border-2 border-slate-300 bg-white text-xs font-bold text-slate-600 transition-all hover:scale-110"
+                      title="No color"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Tags */}
             <div>

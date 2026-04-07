@@ -9,6 +9,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import { Plus } from "lucide-react";
 import { Column } from "./column";
 import { TaskCard } from "./task-card";
+import { BulkActionsToolbar } from "./bulk-actions-toolbar";
 import { TaskModal } from "../modals/task-modal";
 import { useAppStore } from "@/lib/store";
 import { Task, TaskStatus } from "@/lib/types";
@@ -19,6 +20,9 @@ export function Board() {
   const tasks = useAppStore((s) => s.tasks);
   const searchQuery = useAppStore((s) => s.searchQuery);
   const filterPriority = useAppStore((s) => s.filterPriority);
+  const filterArchived = useAppStore((s) => s.filterArchived);
+  const filterAssignees = useAppStore((s) => s.filterAssignees);
+  const filterTags = useAppStore((s) => s.filterTags);
   const selectedTask = useAppStore((s) => s.selectedTask);
   const setSelectedTask = useAppStore((s) => s.setSelectedTask);
   const reorderTasks = useAppStore((s) => s.reorderTasks);
@@ -70,14 +74,40 @@ export function Board() {
   // Filter tasks
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
+      // Search filter
       const matchesSearch = !searchQuery ||
         t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         t.description.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      // Priority filter
       const matchesPriority = !filterPriority || t.priority === filterPriority;
+      
+      // Completed status filter
       const matchesCompleted = preferences.showCompleted || t.status !== "done";
-      return matchesSearch && matchesPriority && matchesCompleted;
+      
+      // Archive filter
+      const matchesArchived = !filterArchived || t.archived === true;
+      
+      // Assignee filter (if assignees are selected, task must have one of them)
+      const matchesAssignees = filterAssignees.length === 0 || 
+        t.assignees.some(assignee => filterAssignees.includes(assignee.id));
+      
+      // Tags filter (if tags are selected, task must have at least one)
+      const matchesTags = filterTags.length === 0 || 
+        t.tags.some(tag => filterTags.includes(tag.id));
+      
+      return matchesSearch && matchesPriority && matchesCompleted && 
+             matchesArchived && matchesAssignees && matchesTags;
     });
-  }, [tasks, searchQuery, filterPriority, preferences.showCompleted]);
+  }, [
+    tasks, 
+    searchQuery, 
+    filterPriority, 
+    filterArchived,
+    filterAssignees,
+    filterTags,
+    preferences.showCompleted,
+  ]);
 
   const getColumnTasks = (status: TaskStatus) =>
     filteredTasks.filter((t) => t.status === status).sort((a, b) => a.order - b.order);
@@ -230,6 +260,9 @@ export function Board() {
           onClose={() => setSelectedTask(null)}
         />
       )}
+
+      {/* Bulk actions toolbar */}
+      <BulkActionsToolbar />
     </>
   );
 }

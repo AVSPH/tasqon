@@ -171,18 +171,28 @@ export async function deleteProject(projectId: string) {
 export async function fetchProjectMembers(projectId: string) {
   const { data, error } = await supabase
     .from("project_members")
-    .select("role, profile:profiles(id, full_name, email, avatar_url, initials, color, role)")
+    .select("user_id, role, profile:profiles(id, full_name, email, avatar_url, initials, color, role)")
     .eq("project_id", projectId);
 
   if (error) throw error;
 
-  const rows = (data || []) as unknown as Array<{ role: string; profile: ProfileRow | null }>;
+  const rows = (data || []) as unknown as Array<{ user_id: string; role: string; profile: ProfileRow | null }>;
   return rows
     .filter((row) => row.profile)
     .map((row) => {
       const member = mapProfileToMember(row.profile as ProfileRow);
       return { ...member, role: row.role };
     });
+}
+
+export async function updateMemberRole(projectId: string, userId: string, role: string) {
+  const { error } = await supabase
+    .from("project_members")
+    .update({ role })
+    .eq("project_id", projectId)
+    .eq("user_id", userId);
+
+  if (error) throw error;
 }
 
 export async function removeProjectMember(projectId: string, userId: string) {
@@ -313,6 +323,7 @@ export async function fetchTasks(projectId: string) {
       attachments,
       tags,
       coverColor: row.cover_color || undefined,
+      archived: row.archived ?? false,
       order: row.order_index ?? 0,
     } as Task;
   });
@@ -388,6 +399,7 @@ export async function fetchUserAssignedTasks(userId: string) {
       attachments,
       tags,
       coverColor: row.cover_color || undefined,
+      archived: row.archived ?? false,
       order: row.order_index ?? 0,
     } as Task;
   }).filter(task => task.assignees.some(a => a.id === userId));
@@ -537,6 +549,7 @@ export async function updateTask(taskId: string, updates: Partial<Task>) {
   if (updates.dueDate !== undefined) payload.due_date = updates.dueDate;
   if (updates.status !== undefined) payload.column_id = updates.status as TaskStatus;
   if (updates.coverColor !== undefined) payload.cover_color = updates.coverColor;
+  if (updates.archived !== undefined) payload.archived = updates.archived;
   if (updates.order !== undefined) payload.order_index = updates.order;
 
   if (Object.keys(payload).length === 0) return;
