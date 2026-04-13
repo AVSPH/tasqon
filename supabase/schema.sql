@@ -11,7 +11,25 @@ create table if not exists profiles (
   initials text,
   color text,
   role text default 'member',
+  google_access_token text,
+  google_refresh_token text,
+  google_token_expires_at timestamptz,
+  google_calendar_id text,
+  google_calendar_timezone text,
+  google_reminder_popup_minutes integer,
+  google_reminder_email_minutes integer,
   created_at timestamptz default now()
+);
+
+create table if not exists task_calendar_events (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references tasks(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  calendar_id text not null,
+  calendar_event_id text not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique (task_id, user_id)
 );
 
 create or replace function public.handle_new_user()
@@ -517,6 +535,20 @@ create policy "invites:owner_select" on invites
   for select using (public.is_project_owner(project_id));
 create policy "invites:invitee_update" on invites
   for update using (lower(email) = lower(auth.email()));
+
+alter table task_calendar_events enable row level security;
+drop policy if exists "calendar_events:self_select" on task_calendar_events;
+drop policy if exists "calendar_events:self_insert" on task_calendar_events;
+drop policy if exists "calendar_events:self_update" on task_calendar_events;
+drop policy if exists "calendar_events:self_delete" on task_calendar_events;
+create policy "calendar_events:self_select" on task_calendar_events
+  for select using (user_id = auth.uid());
+create policy "calendar_events:self_insert" on task_calendar_events
+  for insert with check (user_id = auth.uid());
+create policy "calendar_events:self_update" on task_calendar_events
+  for update using (user_id = auth.uid());
+create policy "calendar_events:self_delete" on task_calendar_events
+  for delete using (user_id = auth.uid());
 
 -- Grants (RLS still applies)
 grant usage on schema public to authenticated;

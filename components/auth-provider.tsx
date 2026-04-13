@@ -51,6 +51,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fetch("/api/invite/accept", { method: "POST" }).catch(() => {});
   }, [session?.user?.id, isLoading, isFetching]);
 
+  useEffect(() => {
+    const accessToken = session?.provider_token ?? null;
+    const refreshToken = session?.provider_refresh_token ?? null;
+    if (!accessToken && !refreshToken) return;
+    void fetch("/api/google/store-tokens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accessToken, refreshToken }),
+    }).catch(() => {});
+  }, [session?.provider_token, session?.provider_refresh_token]);
+
 
   const value = useMemo<AuthContextValue>(
     () => ({

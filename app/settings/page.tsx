@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { User, SlidersHorizontal, ShieldCheck } from "lucide-react";
+import { User, SlidersHorizontal, ShieldCheck, Calendar, RefreshCw } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,11 @@ export default function SettingsPage() {
   const [email, setEmail] = useState("");
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [popupMinutes, setPopupMinutes] = useState<number | null>(60);
+  const [emailMinutes, setEmailMinutes] = useState<number | null>(24 * 60);
+  const [calendarReady, setCalendarReady] = useState(false);
+  const [calendarSaving, setCalendarSaving] = useState(false);
+  const [calendarSyncing, setCalendarSyncing] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -29,6 +34,20 @@ export default function SettingsPage() {
       setEmail("");
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!isAuthenticated || isLoading) return;
+    fetch("/api/google/settings")
+      .then((res) => res.json())
+      .then((data) => {
+        setPopupMinutes(typeof data?.popupMinutes === "number" ? data.popupMinutes : null);
+        setEmailMinutes(typeof data?.emailMinutes === "number" ? data.emailMinutes : null);
+        setCalendarReady(true);
+      })
+      .catch(() => {
+        setCalendarReady(true);
+      });
+  }, [isAuthenticated, isLoading]);
 
   const handleSave = async () => {
     if (!user) return;
@@ -70,6 +89,56 @@ export default function SettingsPage() {
       console.error("Profile update error:", error);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const reminderOptions: Array<{ label: string; value: number | null }> = [
+    { label: "Off", value: null },
+    { label: "At time of event", value: 0 },
+    { label: "10 minutes before", value: 10 },
+    { label: "30 minutes before", value: 30 },
+    { label: "1 hour before", value: 60 },
+    { label: "1 day before", value: 24 * 60 },
+  ];
+
+  const handleSaveCalendarSettings = async () => {
+    if (!isAuthenticated) return;
+    setCalendarSaving(true);
+    try {
+      const response = await fetch("/api/google/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ popupMinutes, emailMinutes }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to save calendar settings");
+      }
+      toast.success("Calendar reminders updated");
+      await fetch("/api/google/calendar/sync", { method: "POST" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to save calendar settings";
+      toast.error(message);
+    } finally {
+      setCalendarSaving(false);
+    }
+  };
+
+  const handleManualSync = async () => {
+    if (!isAuthenticated) return;
+    setCalendarSyncing(true);
+    try {
+      const response = await fetch("/api/google/calendar/sync", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || "Calendar sync failed");
+      }
+      toast.success("Calendar synced successfully");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Calendar sync failed";
+      toast.error(message);
+    } finally {
+      setCalendarSyncing(false);
     }
   };
 
@@ -194,6 +263,82 @@ export default function SettingsPage() {
                 </label>
               ))}
             </div>
+          </div>
+        </div>
+
+        <div className="bg-white/80 backdrop-blur-xl border border-white/70 shadow-card rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-9 h-9 rounded-xl bg-white/70 border border-white/70 flex items-center justify-center">
+              <Calendar className="w-4 h-4 text-brand-500" />
+            </div>
+            <div>
+              <h2 className="font-display font-semibold text-slate-800">Google Calendar</h2>
+              <p className="text-xs text-slate-400">Manage reminders and manual sync.</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="rounded-xl border border-white/70 bg-white/70 px-3 py-2.5">
+              <label className="text-xs text-slate-500">Popup reminder</label>
+              <select
+                value={popupMinutes === null ? "off" : String(popupMinutes)}
+                onChange={(e) => {
+                  const value = e.target.value === "off" ? null : Number(e.target.value);
+                  setPopupMinutes(Number.isNaN(value as number) ? null : (value as number | null));
+                }}
+                className="w-full h-9 mt-1 px-3 rounded-lg bg-white/70 border border-white/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400/30"
+                disabled={!calendarReady || !isAuthenticated}
+              >
+                {reminderOptions.map((option) => (
+                  <option
+                    key={option.label}
+                    value={option.value === null ? "off" : String(option.value)}
+                  >
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="rounded-xl border border-white/70 bg-white/70 px-3 py-2.5">
+              <label className="text-xs text-slate-500">Email reminder</label>
+              <select
+                value={emailMinutes === null ? "off" : String(emailMinutes)}
+                onChange={(e) => {
+                  const value = e.target.value === "off" ? null : Number(e.target.value);
+                  setEmailMinutes(Number.isNaN(value as number) ? null : (value as number | null));
+                }}
+                className="w-full h-9 mt-1 px-3 rounded-lg bg-white/70 border border-white/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400/30"
+                disabled={!calendarReady || !isAuthenticated}
+              >
+                {reminderOptions.map((option) => (
+                  <option
+                    key={option.label}
+                    value={option.value === null ? "off" : String(option.value)}
+                  >
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-4">
+            <button
+              onClick={handleSaveCalendarSettings}
+              className="h-8 px-3 rounded-lg bg-brand-500 text-white text-xs font-medium hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!isAuthenticated || !calendarReady || calendarSaving}
+            >
+              {calendarSaving ? "Saving..." : "Save reminder settings"}
+            </button>
+            <button
+              onClick={handleManualSync}
+              className="h-8 px-3 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+              disabled={!isAuthenticated || calendarSyncing}
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              {calendarSyncing ? "Syncing..." : "Sync Google Calendar"}
+            </button>
           </div>
         </div>
 

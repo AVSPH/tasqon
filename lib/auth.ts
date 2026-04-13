@@ -89,7 +89,14 @@ export async function updateUserProfile({
 export async function signInWithGoogle(redirectTo?: string) {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: redirectTo ? { redirectTo } : undefined,
+    options: {
+      ...(redirectTo ? { redirectTo } : {}),
+      scopes: "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events",
+      queryParams: {
+        access_type: "offline",
+        prompt: "consent",
+      },
+    },
   });
   if (error) throw error;
   return data;

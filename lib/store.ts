@@ -21,6 +21,17 @@ const UUID_REGEX =
 function isUuid(value: string | null | undefined) {
   return !!value && UUID_REGEX.test(value);
 }
+
+async function syncGoogleCalendar(projectId?: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    await fetch("/api/google/calendar/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: projectId ?? null }),
+    });
+  } catch {}
+}
 import {
   addChecklistItem as addChecklistItemApi,
   addComment as addCommentApi,
@@ -256,6 +267,10 @@ export const useAppStore = create<AppState>()(
               isDataLoading: false,
             };
           });
+
+          if (get().activeProjectId === projectId) {
+            void syncGoogleCalendar(projectId);
+          }
         } catch (error) {
           // Only update loading state if this is still the active request
           set((state) => {
@@ -390,6 +405,8 @@ export const useAppStore = create<AppState>()(
                 : state.selectedTask,
           };
         });
+
+        void syncGoogleCalendar(projectId);
       },
 
       moveTask: async (taskId, newStatus, actor) => {
@@ -502,6 +519,8 @@ export const useAppStore = create<AppState>()(
             target: task.title,
           });
         }
+
+        void syncGoogleCalendar(state.activeProjectId);
       },
 
       deleteTask: async (taskId, actor) => {
@@ -536,6 +555,8 @@ export const useAppStore = create<AppState>()(
             selectedTask: s.selectedTask?.id === taskId ? null : s.selectedTask,
           };
         });
+
+        void syncGoogleCalendar(state.activeProjectId);
       },
 
       archiveTask: async (taskId, actor) => {
@@ -578,6 +599,8 @@ export const useAppStore = create<AppState>()(
                 : s.selectedTask,
           };
         });
+
+        void syncGoogleCalendar(state.activeProjectId);
       },
 
       unarchiveTask: async (taskId, actor) => {
@@ -620,6 +643,8 @@ export const useAppStore = create<AppState>()(
                 : s.selectedTask,
           };
         });
+
+        void syncGoogleCalendar(state.activeProjectId);
       },
 
       duplicateTask: async (taskId, actor) => {
@@ -670,6 +695,8 @@ export const useAppStore = create<AppState>()(
           state.activeProjectId,
           userData?.user?.id ?? undefined,
         );
+
+        void syncGoogleCalendar(state.activeProjectId);
       },
 
       createTag: async (label, color) => {
@@ -861,6 +888,7 @@ export const useAppStore = create<AppState>()(
       bulkArchive: async (taskIds, actor) => {
         const role = get().currentMemberRole;
         if (role !== "owner" && role !== "member") return;
+        const projectId = get().activeProjectId;
 
         set((state) => ({
           tasks: state.tasks.map((task) =>
@@ -873,12 +901,14 @@ export const useAppStore = create<AppState>()(
             taskIds.map((taskId) => updateTaskApi(taskId, { archived: true }))
           );
           get().clearSelection();
+          void syncGoogleCalendar(projectId);
         } catch {}
       },
 
       bulkUnarchive: async (taskIds, actor) => {
         const role = get().currentMemberRole;
         if (role !== "owner" && role !== "member") return;
+        const projectId = get().activeProjectId;
 
         set((state) => ({
           tasks: state.tasks.map((task) =>
@@ -891,12 +921,14 @@ export const useAppStore = create<AppState>()(
             taskIds.map((taskId) => updateTaskApi(taskId, { archived: false }))
           );
           get().clearSelection();
+          void syncGoogleCalendar(projectId);
         } catch {}
       },
 
       bulkUpdatePriority: async (taskIds, priority, actor) => {
         const role = get().currentMemberRole;
         if (role !== "owner" && role !== "member") return;
+        const projectId = get().activeProjectId;
 
         set((state) => ({
           tasks: state.tasks.map((task) =>
@@ -909,12 +941,14 @@ export const useAppStore = create<AppState>()(
             taskIds.map((taskId) => updateTaskApi(taskId, { priority }))
           );
           get().clearSelection();
+          void syncGoogleCalendar(projectId);
         } catch {}
       },
 
       bulkAssignTo: async (taskIds, assigneeIds, actor) => {
         const role = get().currentMemberRole;
         if (role !== "owner" && role !== "member") return;
+        const projectId = get().activeProjectId;
 
         const selectedMembers = get().members.filter((m) =>
           assigneeIds.includes(m.id)
@@ -935,12 +969,14 @@ export const useAppStore = create<AppState>()(
             )
           );
           get().clearSelection();
+          void syncGoogleCalendar(projectId);
         } catch {}
       },
 
       bulkAddTags: async (taskIds, tagIds, actor) => {
         const role = get().currentMemberRole;
         if (role !== "owner" && role !== "member") return;
+        const projectId = get().activeProjectId;
 
         const selectedTags = get().tags.filter((t) =>
           tagIds.includes(t.id)
@@ -962,12 +998,14 @@ export const useAppStore = create<AppState>()(
             })
           );
           get().clearSelection();
+          void syncGoogleCalendar(projectId);
         } catch {}
       },
 
       bulkMoveToColumn: async (taskIds, columnId, actor) => {
         const role = get().currentMemberRole;
         if (role !== "owner" && role !== "member") return;
+        const projectId = get().activeProjectId;
 
         set((state) => ({
           tasks: state.tasks.map((task) =>
@@ -982,6 +1020,7 @@ export const useAppStore = create<AppState>()(
             )
           );
           get().clearSelection();
+          void syncGoogleCalendar(projectId);
         } catch {}
       },
     }),
